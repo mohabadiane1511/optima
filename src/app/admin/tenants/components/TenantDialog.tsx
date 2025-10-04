@@ -50,6 +50,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [adminCredentials, setAdminCredentials] = useState<{ email: string; password: string } | null>(null);
 
     // Réinitialiser le formulaire quand le dialog s'ouvre
     useEffect(() => {
@@ -101,8 +102,16 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
             });
 
             if (response.ok) {
-                onSaved();
-                onOpenChange(false);
+                const result = await response.json();
+                if (result.adminEmail && result.tempPassword) {
+                    setAdminCredentials({
+                        email: result.adminEmail,
+                        password: result.tempPassword
+                    });
+                } else {
+                    onSaved();
+                    onOpenChange(false);
+                }
             } else {
                 const data = await response.json();
                 setError(data.error || 'Une erreur est survenue');
@@ -174,14 +183,18 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label htmlFor="contactEmail">Email de contact</Label>
+                            <Label htmlFor="contactEmail">Email de contact *</Label>
                             <Input
                                 id="contactEmail"
                                 type="email"
                                 value={formData.contactEmail}
                                 onChange={(e) => setFormData(prev => ({ ...prev, contactEmail: e.target.value }))}
                                 placeholder="contact@entreprise.com"
+                                required
                             />
+                            <p className="text-xs text-gray-500">
+                                Cet email sera utilisé pour créer le compte administrateur de l'entreprise
+                            </p>
                         </div>
 
                         <div className="space-y-2">
@@ -213,19 +226,54 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
                         </Select>
                     </div>
 
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => onOpenChange(false)}
-                            disabled={isLoading}
-                        >
-                            Annuler
-                        </Button>
-                        <Button type="submit" disabled={isLoading}>
-                            {isLoading ? 'Enregistrement...' : (tenant ? 'Modifier' : 'Créer')}
-                        </Button>
-                    </DialogFooter>
+                    {adminCredentials ? (
+                        <div className="space-y-4">
+                            <Alert className="bg-green-50 border-green-200">
+                                <AlertDescription>
+                                    <div className="space-y-2">
+                                        <p className="font-medium text-green-800">
+                                            L'entreprise a été créée avec succès !
+                                        </p>
+                                        <p className="text-sm text-green-700">
+                                            Un compte administrateur a été créé avec les identifiants suivants :
+                                        </p>
+                                        <div className="bg-white p-4 rounded-md border border-green-200">
+                                            <p><strong>Email :</strong> {adminCredentials.email}</p>
+                                            <p><strong>Mot de passe temporaire :</strong> {adminCredentials.password}</p>
+                                        </div>
+                                        <p className="text-xs text-green-700">
+                                            ⚠️ Notez bien ce mot de passe, il ne sera plus affiché par la suite.
+                                        </p>
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
+                            <DialogFooter>
+                                <Button
+                                    onClick={() => {
+                                        setAdminCredentials(null);
+                                        onSaved();
+                                        onOpenChange(false);
+                                    }}
+                                >
+                                    J'ai noté les identifiants
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    ) : (
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => onOpenChange(false)}
+                                disabled={isLoading}
+                            >
+                                Annuler
+                            </Button>
+                            <Button type="submit" disabled={isLoading}>
+                                {isLoading ? 'Enregistrement...' : (tenant ? 'Modifier' : 'Créer')}
+                            </Button>
+                        </DialogFooter>
+                    )}
                 </form>
             </DialogContent>
         </Dialog>
