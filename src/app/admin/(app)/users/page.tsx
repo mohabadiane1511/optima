@@ -21,7 +21,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { UserDialog } from './components/UserDialog';
+import { UserDialog } from '../../users/components/UserDialog';
 import Link from 'next/link';
 
 interface User {
@@ -119,7 +119,7 @@ export default function UsersPage() {
                 <nav className="flex" aria-label="Breadcrumb">
                     <ol className="inline-flex items-center space-x-1 md:space-x-3">
                         <li className="inline-flex items-center">
-                            <Link href="/admin/dashboard" className="text-gray-500 hover:text-gray-700">
+                            <Link href="/admin/(app)/dashboard" className="text-gray-500 hover:text-gray-700">
                                 Super Admin
                             </Link>
                         </li>
@@ -295,3 +295,4 @@ export default function UsersPage() {
         </div>
     );
 }
+

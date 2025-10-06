@@ -22,7 +22,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { TenantDialog } from './components/TenantDialog';
+import { TenantDialog } from '../../tenants/components/TenantDialog';
 import Link from 'next/link';
 
 interface Tenant {
@@ -142,7 +142,7 @@ export default function TenantsPage() {
                 <nav className="flex" aria-label="Breadcrumb">
                     <ol className="inline-flex items-center space-x-1 md:space-x-3">
                         <li className="inline-flex items-center">
-                            <Link href="/admin/dashboard" className="text-gray-500 hover:text-gray-700">
+                            <Link href="/admin/(app)/dashboard" className="text-gray-500 hover:text-gray-700">
                                 Super Admin
                             </Link>
                         </li>
@@ -328,3 +328,4 @@ export default function TenantsPage() {
         </div>
     );
 }
+

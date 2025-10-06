@@ -21,10 +21,15 @@ import {
 export function AdminTopbar() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    const handleLogout = () => {
-        // Supprimer le cookie de session
-        document.cookie = 'sa_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-        window.location.href = '/admin/login';
+    const handleLogout = async () => {
+        try {
+            const res = await fetch('/api/admin/logout', { method: 'POST' });
+            if (res.ok) {
+                window.location.href = '/admin/login';
+            }
+        } catch (e) {
+            window.location.href = '/admin/login';
+        }
     };
 
     return (
