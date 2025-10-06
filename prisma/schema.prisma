@@ -26,6 +26,7 @@ model User {
   email     String   @unique
   name      String?
   passwordHash String?
+  mustChangePassword Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   memberships Membership[]

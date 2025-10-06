@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
           email: contactEmail,
           name: `Admin ${name}`,
           passwordHash,
+          mustChangePassword: true,
           memberships: {
             create: {
               tenantId: tenant.id,
