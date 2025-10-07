@@ -36,8 +36,12 @@ export default function ProductsPage() {
     const nf = useMemo(() => new Intl.NumberFormat('fr-FR'), []);
 
     // Données mock pour graphiques (12 mois)
-    const MOVES_IN = [50, 60, 45, 80, 70, 65, 72, 90, 85, 60, 55, 68];
-    const MOVES_OUT = [40, 55, 38, 70, 66, 60, 70, 82, 80, 58, 50, 60];
+    // Chart dynamique: séries IN/OUT issues de l'API summary
+    const [granularity, setGranularity] = useState<'daily   ' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+    const [chartProductId, setChartProductId] = useState<string>('ALL');
+    const [series, setSeries] = useState<{ date: string; in: number; out: number }[]>([]);
+    const [chartLoading, setChartLoading] = useState(false);
+    const MONTHS_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
 
     // Etat produits (dynamique)
     const [products, setProducts] = useState<Product[] | null>(null);
@@ -104,6 +108,23 @@ export default function ProductsPage() {
 
     // Charger au montage
     useEffect(() => { loadProducts(); }, []);
+    // Charger séries du chart selon granularité
+    useEffect(() => {
+        (async () => {
+            setChartLoading(true);
+            try {
+                const params = new URLSearchParams({ granularity, window: (granularity === 'daily' ? 7 : granularity === 'weekly' ? 12 : 12).toString() });
+                if (chartProductId && chartProductId !== 'ALL') params.set('productId', chartProductId);
+                const res = await fetch(`/api/tenant/stock-movements/summary?${params.toString()}`, { cache: 'no-store' });
+                const data = await res.json();
+                setSeries(data?.data || []);
+            } catch {
+                setSeries([]);
+            } finally {
+                setChartLoading(false);
+            }
+        })();
+    }, [granularity, chartProductId]);
     // Charger mouvements récents au montage
     useEffect(() => {
         (async () => {
@@ -213,44 +234,83 @@ export default function ProductsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Mouvements mensuels</CardTitle>
-                        <CardDescription>Entrées vs Sorties (mock)</CardDescription>
+                        <CardTitle>Mouvements ({granularity})</CardTitle>
+                        <CardDescription>Entrées vs Sorties</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="w-full h-40">
-                            <svg viewBox="0 0 100 40" className="w-full h-full">
-                                <g stroke="#e5e7eb" strokeWidth="0.2">
-                                    <line x1="0" y1="39" x2="100" y2="39" />
-                                    <line x1="0" y1="20" x2="100" y2="20" />
-                                </g>
-                                <polyline
-                                    fill="rgba(16,185,129,0.15)"
-                                    stroke="#10b981"
-                                    strokeWidth="0.6"
-                                    points={(() => {
-                                        const max = Math.max(...MOVES_IN);
-                                        const step = 100 / (MOVES_IN.length - 1);
-                                        const pts = MOVES_IN.map((v, i) => `${i * step},${40 - (v / max) * 35}`);
-                                        return `0,40 ${pts.join(" ")} 100,40`;
-                                    })()}
-                                />
-                                <polyline
-                                    fill="rgba(59,130,246,0.15)"
-                                    stroke="#3b82f6"
-                                    strokeWidth="0.6"
-                                    points={(() => {
-                                        const max = Math.max(...MOVES_OUT);
-                                        const step = 100 / (MOVES_OUT.length - 1);
-                                        const pts = MOVES_OUT.map((v, i) => `${i * step},${40 - (v / max) * 35}`);
-                                        return `0,40 ${pts.join(" ")} 100,40`;
-                                    })()}
-                                />
-                            </svg>
-                            <div className="mt-2 flex justify-between text-xs text-gray-400">
-                                {['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'].map(m => (
-                                    <span key={m} className="w-8 text-center hidden md:block">{m}</span>
-                                ))}
+                        <div className="flex flex-col md:flex-row md:items-center gap-2 mb-3">
+                            <Button size="sm" variant={granularity === 'daily' ? 'default' : 'outline'} onClick={() => setGranularity('daily')}>Jours</Button>
+                            <Button size="sm" variant={granularity === 'weekly' ? 'default' : 'outline'} onClick={() => setGranularity('weekly')}>Semaines</Button>
+                            <Button size="sm" variant={granularity === 'monthly' ? 'default' : 'outline'} onClick={() => setGranularity('monthly')}>Mois</Button>
+                            <Button size="sm" variant={granularity === 'yearly' ? 'default' : 'outline'} onClick={() => setGranularity('yearly')}>Années</Button>
+                            <div className="md:ml-auto w-full md:w-64">
+                                <Select value={chartProductId} onValueChange={setChartProductId}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Tous les produits" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="ALL">Tous les produits</SelectItem>
+                                        {(products ?? []).map((p) => (
+                                            <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
+                        </div>
+                        <div className="w-full h-56">
+                            <svg viewBox="0 0 100 56" className="w-full h-full">
+                                {(() => {
+                                    const maxVal = Math.max(1, ...series.map(s => Math.max(s.in, s.out)));
+                                    const n = Math.max(1, series.length);
+                                    const groupWidth = 100 / n; // largeur d'un groupe
+                                    const barWidth = Math.max(1.5, (groupWidth * 0.8) / 2); // deux barres par groupe
+                                    const yScale = (v: number) => 50 - (v / maxVal) * 45; // marge haute 6, basse 6
+
+                                    // Grille + ticks
+                                    const ticks = 5;
+                                    const grid: JSX.Element[] = [];
+                                    for (let i = 0; i <= ticks; i++) {
+                                        const y = 50 - (i / ticks) * 45;
+                                        const val = Math.round((i / ticks) * maxVal);
+                                        grid.push(
+                                            <g key={i}>
+                                                <line x1="0" y1={y} x2="100" y2={y} stroke="#e5e7eb" strokeWidth="0.2" />
+                                                <text x="0" y={y - 0.5} fontSize="2" fill="#9ca3af">{val}</text>
+                                            </g>
+                                        );
+                                    }
+
+                                    const bars = series.map((s, i) => {
+                                        const groupX = i * groupWidth + groupWidth / 2;
+                                        const inY = yScale(s.in);
+                                        const outY = yScale(s.out);
+                                        const baseY = 50;
+                                        return (
+                                            <g key={i}>
+                                                {/* IN (vert) */}
+                                                <rect x={groupX - barWidth - 0.5} y={inY} width={barWidth} height={baseY - inY} fill="#10b981" fillOpacity="0.6">
+                                                    <title>{`${new Date(s.date).toLocaleDateString('fr-FR')}\nEntrées: ${s.in}`}</title>
+                                                </rect>
+                                                {/* OUT (bleu) */}
+                                                <rect x={groupX + 0.5} y={outY} width={barWidth} height={baseY - outY} fill="#3b82f6" fillOpacity="0.6">
+                                                    <title>{`${new Date(s.date).toLocaleDateString('fr-FR')}\nSorties: ${s.out}`}</title>
+                                                </rect>
+                                                {/* Label X */}
+                                                <text x={groupX} y={54} fontSize="2" textAnchor="middle" fill="#9ca3af">
+                                                    {granularity === 'monthly' ? MONTHS_LABELS[new Date(s.date).getMonth()] : new Date(s.date).toLocaleDateString('fr-FR')}
+                                                </text>
+                                            </g>
+                                        );
+                                    });
+
+                                    return (
+                                        <g>
+                                            {grid}
+                                            {bars}
+                                        </g>
+                                    );
+                                })()}
+                            </svg>
                         </div>
                         <div className="mt-3 flex gap-4 text-xs">
                             <span className="inline-flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Entrées</span>
