@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       tenantId: tenant.id,
       mustChangePassword: user.mustChangePassword ?? false,
     };
-    setTenantSessionCookie(Buffer.from(JSON.stringify(payload)).toString('base64'));
+    await setTenantSessionCookie(Buffer.from(JSON.stringify(payload)).toString('base64'));
 
     return NextResponse.json({ ok: true, mustChangePassword: payload.mustChangePassword });
   } catch (e) {

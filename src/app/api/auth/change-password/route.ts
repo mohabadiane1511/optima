@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Mot de passe trop court (min 8)' }, { status: 400 });
     }
 
-    const raw = getTenantSessionCookie();
+    const raw = await getTenantSessionCookie();
     if (!raw) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     const payload = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as { userId: string };
 
@@ -25,11 +25,12 @@ export async function POST(request: NextRequest) {
 
     // Rafraîchir le cookie de session avec mustChangePassword=false
     try {
-      const rawOld = getTenantSessionCookie();
+      const rawOld = await getTenantSessionCookie();
       if (rawOld) {
         const oldPayload = JSON.parse(Buffer.from(rawOld, 'base64').toString('utf-8')) as any;
         const newPayload = { ...oldPayload, mustChangePassword: false };
-        setTenantSessionCookie(Buffer.from(JSON.stringify(newPayload)).toString('base64'));
+        const updatedToken = Buffer.from(JSON.stringify(newPayload)).toString('base64');
+        await setTenantSessionCookie(updatedToken);
       }
     } catch {}
 

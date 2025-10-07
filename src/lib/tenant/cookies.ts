@@ -2,14 +2,14 @@ import { cookies } from 'next/headers';
 
 export const TENANT_SESSION_COOKIE = 'tenant_session';
 
-export function getTenantSessionCookie(): string | null {
-  const jar = cookies();
+export async function getTenantSessionCookie(): Promise<string | null> {
+  const jar = await cookies();
   const val = jar.get(TENANT_SESSION_COOKIE)?.value;
   return val ?? null;
 }
 
-export function setTenantSessionCookie(token: string, options?: { maxAgeSeconds?: number }) {
-  const jar = cookies();
+export async function setTenantSessionCookie(token: string, options?: { maxAgeSeconds?: number }) {
+  const jar = await cookies();
   jar.set(TENANT_SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -19,8 +19,8 @@ export function setTenantSessionCookie(token: string, options?: { maxAgeSeconds?
   });
 }
 
-export function clearTenantSessionCookie() {
-  const jar = cookies();
+export async function clearTenantSessionCookie() {
+  const jar = await cookies();
   jar.delete(TENANT_SESSION_COOKIE);
 }
 

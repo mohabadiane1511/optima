@@ -8,9 +8,10 @@ import { Search, Bell, User } from 'lucide-react';
 export function TenantTopbar() {
     const handleLogout = async () => {
         try {
-            await fetch('/api/auth/logout', { method: 'POST' });
+            await fetch('/api/auth/logout', { method: 'POST', cache: 'no-store' });
         } finally {
-            window.location.href = '/auth/login';
+            // Remplacer l'URL pour éviter le retour arrière vers une page protégée
+            window.location.replace('/auth/login');
         }
     };
     return (
