@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, MoreHorizontal, Package, Upload, Download, Filter, History } from "lucide-react";
+import { Plus, MoreHorizontal, Package, Upload, Download, Filter, History, FileDown } from "lucide-react";
 
 type Product = {
     id: string;
@@ -58,6 +58,10 @@ export default function ProductsPage() {
     const [historyOpen, setHistoryOpen] = useState(false);
     const [historyRows, setHistoryRows] = useState<{ id: string; type: string; qty: number; createdAt: string; createdBy: string | null; createdByName?: string | null; createdByEmail?: string | null; productName?: string | null; productSku?: string | null }[]>([]);
     const [recentMoves, setRecentMoves] = useState<typeof historyRows>([]);
+    const [exportOpen, setExportOpen] = useState(false);
+    const [exportPreset, setExportPreset] = useState<'today' | 'last7' | 'thisMonth' | 'custom'>('last7');
+    const [exportFrom, setExportFrom] = useState<string>('');
+    const [exportTo, setExportTo] = useState<string>('');
 
     async function loadProducts() {
         try {
@@ -194,11 +198,13 @@ export default function ProductsPage() {
                 <div className="mt-2 flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Produits & Stocks</h1>
-                        <p className="text-gray-600">Catalogue produits et niveaux de stock (exemple statique)</p>
+                        <p className="text-gray-600">Catalogue produits et niveaux de stock </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline"><Upload className="h-4 w-4 mr-2" /> Import CSV</Button>
-                        <Button variant="outline"><Download className="h-4 w-4 mr-2" /> Export</Button>
+                        <Button variant="outline" onClick={() => setExportOpen(true)}><FileDown className="h-4 w-4 mr-2" /> Export mouvements</Button>
+                        <Button variant="outline" asChild>
+                            <a href="/api/tenant/products/export"><FileDown className="h-4 w-4 mr-2" /> Export produits</a>
+                        </Button>
                         <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" /> Nouveau produit</Button>
                     </div>
                 </div>
@@ -541,6 +547,53 @@ export default function ProductsPage() {
                             </TableBody>
                         </Table>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog Export CSV mouvements */}
+            <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+                <DialogContent className="sm:max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>Exporter les mouvements de stock</DialogTitle>
+                        <DialogDescription>Choisissez une période à exporter</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm text-gray-600">Période</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button variant={exportPreset === 'today' ? 'default' : 'outline'} onClick={() => setExportPreset('today')}>Aujourd'hui</Button>
+                                <Button variant={exportPreset === 'last7' ? 'default' : 'outline'} onClick={() => setExportPreset('last7')}>7 derniers jours</Button>
+                                <Button variant={exportPreset === 'thisMonth' ? 'default' : 'outline'} onClick={() => setExportPreset('thisMonth')}>Mois courant</Button>
+                                <Button variant={exportPreset === 'custom' ? 'default' : 'outline'} onClick={() => setExportPreset('custom')}>Personnalisée</Button>
+                            </div>
+                        </div>
+                        {exportPreset === 'custom' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm text-gray-600">Du</label>
+                                    <Input type="datetime-local" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm text-gray-600">Au</label>
+                                    <Input type="datetime-local" value={exportTo} onChange={(e) => setExportTo(e.target.value)} />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setExportOpen(false)}>Annuler</Button>
+                        <Button onClick={() => {
+                            const params = new URLSearchParams();
+                            if (exportPreset !== 'custom') params.set('preset', exportPreset);
+                            if (exportPreset === 'custom') {
+                                if (exportFrom) params.set('from', new Date(exportFrom).toISOString());
+                                if (exportTo) params.set('to', new Date(exportTo).toISOString());
+                            }
+                            const url = `/api/tenant/stock-movements/export?${params.toString()}`;
+                            window.location.href = url;
+                            setExportOpen(false);
+                        }}>Télécharger</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
