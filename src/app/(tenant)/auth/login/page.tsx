@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,10 +42,11 @@ export default function TenantLoginPage() {
     };
 
     return (
-        <div className="max-w-md mx-auto mt-16">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Connexion</CardTitle>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+            <Card className="w-full max-w-md">
+                <CardHeader className="space-y-1">
+                    <CardTitle className="text-2xl text-center">Espace Entreprise</CardTitle>
+                    <CardDescription className="text-center">Connexion à votre compte Optima ERP</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {error && (
@@ -60,7 +61,7 @@ export default function TenantLoginPage() {
                             <Label htmlFor="password">Mot de passe</Label>
                             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
                         </div>
-                        <Button type="submit" disabled={loading}>{loading ? 'Connexion...' : 'Se connecter'}</Button>
+                        <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Connexion...' : 'Se connecter'}</Button>
                     </form>
                 </CardContent>
             </Card>

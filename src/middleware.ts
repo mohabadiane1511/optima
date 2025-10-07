@@ -32,7 +32,10 @@ export function middleware(request: NextRequest) {
     const sessionCookie = request.cookies.get('tenant_session')?.value;
     if (!sessionCookie && !isAuthPath) {
       const url = new URL('/auth/login', request.url);
-      return NextResponse.redirect(url);
+      // Force no-cache pour éviter affichage d’une page app en mémoire
+      const res = NextResponse.redirect(url);
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
     }
 
     if (sessionCookie) {
@@ -40,6 +43,11 @@ export function middleware(request: NextRequest) {
         const payload = JSON.parse(Buffer.from(sessionCookie, 'base64').toString('utf-8')) as { mustChangePassword?: boolean };
         if (payload?.mustChangePassword && !path.startsWith('/auth/change-password')) {
           const url = new URL('/auth/change-password', request.url);
+          return NextResponse.redirect(url);
+        }
+        // Déjà connecté et pas de changement requis: empêcher l'accès à /auth/login
+        if (!payload?.mustChangePassword && path.startsWith('/auth/login')) {
+          const url = new URL('/dashboard', request.url);
           return NextResponse.redirect(url);
         }
       } catch {

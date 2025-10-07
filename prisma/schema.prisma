@@ -54,4 +54,63 @@ model Domain {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 }
 
+// Catalogue & Stock (sans entrepôts)
+model Category {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  products  Product[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  tenantId      String
+  sku           String   @unique
+  name          String
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
+  unit          String   @default("unité")
+  purchasePrice Decimal  @db.Decimal(12,2)
+  salePrice     Decimal  @db.Decimal(12,2)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  stocks        Stock[]
+
+  @@index([tenantId])
+  @@index([tenantId, categoryId])
+}
+
+model Stock {
+  id         String   @id @default(cuid())
+  tenantId   String
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  qtyOnHand  Decimal  @db.Decimal(12,2) @default(0)
+  reorderPoint Decimal @db.Decimal(12,2) @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, productId])
+  @@index([tenantId])
+}
+
+model StockMovement {
+  id         String   @id @default(cuid())
+  tenantId   String
+  productId  String
+  type       String   // 'IN' | 'OUT' | 'ADJUST'
+  qty        Decimal  @db.Decimal(12,2)
+  cost       Decimal? @db.Decimal(12,2)
+  reason     String?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, productId])
+}
+
 

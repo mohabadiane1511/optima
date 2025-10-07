@@ -7,7 +7,7 @@ import { LayoutDashboard, Package, Boxes, Users, Settings } from 'lucide-react';
 
 const nav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Produits', href: '/products', icon: Package },
+    { name: 'Produits & Stocks', href: '/products', icon: Package },
     { name: 'Catégories', href: '/categories', icon: Boxes },
     { name: 'Utilisateurs', href: '/members', icon: Users },
     { name: 'Paramètres', href: '/settings', icon: Settings },
