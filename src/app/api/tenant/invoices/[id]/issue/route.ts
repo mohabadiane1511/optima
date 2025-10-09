@@ -9,9 +9,10 @@ async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const raw = jar.get('tenant_session')?.value;
   if (raw) { try { const p = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as any; if (p?.tenantId) return p.tenantId; } catch {} }
   let { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
-  if (!tenantSlug && process.env.NODE_ENV !== 'production') tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || undefined;
+  if (!tenantSlug && process.env.NODE_ENV !== 'production') tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || null;
   if (!tenantSlug) return null;
-  const t = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+  const db = prisma as any;
+  const t = await db.tenant.findUnique({ where: { slug: tenantSlug } });
   return t?.id || null;
 }
 
@@ -25,20 +26,41 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const tenantId = await resolveTenantId(request);
     if (!tenantId) return NextResponse.json({ error: 'Tenant introuvable' }, { status: 400 });
 
-    const inv = await prisma.invoice.findFirst({ where: { id: params.id, tenantId }, include: { lines: true } });
+    const db = prisma as any;
+    const inv = await db.invoice.findFirst({ where: { id: params.id, tenantId }, include: { lines: true } });
     if (!inv) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
     if (inv.status !== 'draft') return NextResponse.json({ error: 'Déjà émise ou annulée' }, { status: 400 });
     if (!inv.lines.length) return NextResponse.json({ error: 'Aucune ligne' }, { status: 400 });
 
     // simple séquence: compter les factures de l’année courante
     const yearStart = new Date(new Date().getFullYear(), 0, 1);
-    const countYear = await prisma.invoice.count({ where: { tenantId, issueDate: { gte: yearStart } } });
+    const countYear = await db.invoice.count({ where: { tenantId, issueDate: { gte: yearStart } } });
     const number = generateNumber(new Date(), countYear + 1);
 
-    const updated = await prisma.invoice.update({
-      where: { id: inv.id },
-      data: { status: 'sent', issueDate: new Date(), number },
-      select: { id: true, number: true, status: true, issueDate: true }
+    const updated = await db.$transaction(async (txRaw: any) => {
+      const tx = txRaw as any;
+      // 1) Émettre la facture
+      const upd = await tx.invoice.update({
+        where: { id: inv.id },
+        data: { status: 'sent', issueDate: new Date(), number },
+        select: { id: true, number: true, status: true, issueDate: true }
+      });
+
+      // 2) Décrémenter les stocks et créer les mouvements OUT
+      for (const l of inv.lines) {
+        if (!l.productId) continue;
+        const existing = await tx.stock.findFirst({ where: { tenantId, productId: l.productId } });
+        const qty = Number(l.qty || 0);
+        const nextQty = Math.max(0, Number(existing?.qtyOnHand ?? 0) - qty);
+        if (!existing) {
+          await tx.stock.create({ data: { tenantId, productId: l.productId, qtyOnHand: nextQty, reorderPoint: 0 } });
+        } else {
+          await tx.stock.update({ where: { id: existing.id }, data: { qtyOnHand: nextQty } });
+        }
+        await tx.stockMovement.create({ data: { tenantId, productId: l.productId, type: 'OUT', qty, reason: `Invoice ${number}` } });
+      }
+
+      return upd;
     });
 
     return NextResponse.json(updated);

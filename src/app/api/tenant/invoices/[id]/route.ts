@@ -9,9 +9,10 @@ async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const raw = jar.get('tenant_session')?.value;
   if (raw) { try { const p = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as any; if (p?.tenantId) return p.tenantId; } catch {} }
   let { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
-  if (!tenantSlug && process.env.NODE_ENV !== 'production') tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || undefined;
+  if (!tenantSlug && process.env.NODE_ENV !== 'production') tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || null;
   if (!tenantSlug) return null;
-  const t = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+  const db = prisma as any;
+  const t = await db.tenant.findUnique({ where: { slug: tenantSlug } });
   return t?.id || null;
 }
 
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const tenantId = await resolveTenantId(request);
     if (!tenantId) return NextResponse.json({ error: 'Tenant introuvable' }, { status: 400 });
-    const invoice = await prisma.invoice.findFirst({
+    const db = prisma as any;
+    const invoice = await db.invoice.findFirst({
       where: { id: params.id, tenantId },
       include: { customer: true, lines: true, payments: true },
     });

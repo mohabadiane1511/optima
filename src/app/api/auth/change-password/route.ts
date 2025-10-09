@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { getTenantSessionCookie, setTenantSessionCookie } from '@/lib/tenant/cookies';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const payload = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as { userId: string };
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    const updated = await prisma.user.update({
+    const updated = await db.user.update({
       where: { id: payload.userId },
       data: { passwordHash, mustChangePassword: false },
     });

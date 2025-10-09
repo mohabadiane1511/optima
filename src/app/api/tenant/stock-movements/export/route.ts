@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 async function resolveTenant(request: NextRequest) {
   // Session d'abord
@@ -13,16 +13,16 @@ async function resolveTenant(request: NextRequest) {
     try {
       const payload = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as { tenantId?: string };
       if (payload?.tenantId) {
-        const t = await prisma.tenant.findUnique({ where: { id: payload.tenantId } });
+        const t = await db.tenant.findUnique({ where: { id: payload.tenantId } });
         if (t) return t;
       }
     } catch {}
   }
   let { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
   if (!tenantSlug && process.env.NODE_ENV !== 'production') {
-    tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || undefined;
+    tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || null;
   }
-  return tenantSlug ? await prisma.tenant.findUnique({ where: { slug: tenantSlug } }) : null;
+  return tenantSlug ? await db.tenant.findUnique({ where: { slug: tenantSlug } }) : null;
 }
 
 function parsePreset(preset: string | null) {
@@ -96,17 +96,17 @@ export async function GET(request: NextRequest) {
     if (from) where.createdAt = { ...(where.createdAt || {}), gte: from };
     if (to) where.createdAt = { ...(where.createdAt || {}), lte: to };
 
-    const items = await prisma.stockMovement.findMany({ where, orderBy: { createdAt: 'desc' } });
+    const items = await db.stockMovement.findMany({ where, orderBy: { createdAt: 'desc' } });
 
     // Enrichissements légers
-    const productIds = Array.from(new Set(items.map(i => i.productId)));
-    const userIds = Array.from(new Set(items.map(i => i.createdBy).filter(Boolean) as string[]));
+    const productIds = Array.from(new Set(items.map((i: any) => i.productId)));
+    const userIds = Array.from(new Set(items.map((i: any) => i.createdBy).filter(Boolean) as string[]));
     const [products, users] = await Promise.all([
-      productIds.length ? prisma.product.findMany({ where: { id: { in: productIds }, tenantId: tenant.id } }) : Promise.resolve([]),
-      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } }) : Promise.resolve([]),
+      productIds.length ? db.product.findMany({ where: { id: { in: productIds }, tenantId: tenant.id } }) : Promise.resolve([]),
+      userIds.length ? db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } }) : Promise.resolve([]),
     ]);
-    const productMap = Object.fromEntries(products.map(p => [p.id, { name: p.name, sku: p.sku }]));
-    const userMap = Object.fromEntries(users.map(u => [u.id, { name: u.name, email: u.email }]));
+    const productMap = Object.fromEntries(products.map((p: any) => [p.id, { name: p.name, sku: p.sku }]));
+    const userMap = Object.fromEntries(users.map((u: any) => [u.id, { name: u.name, email: u.email }]));
 
     const header = [
       'Date', 'Type', 'Quantite', 'Produit', 'SKU', 'Par (Nom)', 'Par (Email)', 'Raison',

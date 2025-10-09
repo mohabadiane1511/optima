@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 function formatDateFR(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -22,16 +22,16 @@ async function resolveTenant(request: NextRequest) {
     try {
       const payload = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as { tenantId?: string };
       if (payload?.tenantId) {
-        const t = await prisma.tenant.findUnique({ where: { id: payload.tenantId } });
+        const t = await db.tenant.findUnique({ where: { id: payload.tenantId } });
         if (t) return t;
       }
     } catch {}
   }
   let { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
   if (!tenantSlug && process.env.NODE_ENV !== 'production') {
-    tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || undefined;
+    tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || null;
   }
-  return tenantSlug ? await prisma.tenant.findUnique({ where: { slug: tenantSlug } }) : null;
+  return tenantSlug ? await db.tenant.findUnique({ where: { slug: tenantSlug } }) : null;
 }
 
 function toCsvRow(values: (string | number | null | undefined)[]) {
@@ -51,14 +51,14 @@ export async function GET(request: NextRequest) {
     const tenant = await resolveTenant(request);
     if (!tenant) return NextResponse.json({ error: 'Tenant inconnu' }, { status: 404 });
 
-    const products = await prisma.product.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: 'asc' } });
-    const productIds = products.map(p => p.id);
+    const products = await db.product.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: 'asc' } });
+    const productIds = products.map((p: any) => p.id);
     const [stocks, categories] = await Promise.all([
-      prisma.stock.findMany({ where: { tenantId: tenant.id, productId: { in: productIds } } }),
-      prisma.category.findMany({ where: { tenantId: tenant.id } }),
+      db.stock.findMany({ where: { tenantId: tenant.id, productId: { in: productIds } } }),
+      db.category.findMany({ where: { tenantId: tenant.id } }),
     ]);
-    const stockMap = Object.fromEntries(stocks.map(s => [s.productId, s]));
-    const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
+    const stockMap = Object.fromEntries(stocks.map((s: any) => [s.productId, s]));
+    const catMap = Object.fromEntries(categories.map((c: any) => [c.id, c.name]));
 
     const header = ['SKU', 'Nom', 'Catégorie', 'Prix vente', 'Prix achat', 'Unité', 'Actif', 'Stock', 'Seuil'];
     const rows = ['\uFEFF' + toCsvRow(header)];
