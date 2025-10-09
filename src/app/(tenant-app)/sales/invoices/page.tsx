@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Filter, FileDown, Printer } from "lucide-react";
+import { Plus, Filter, FileDown, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type InvoiceRow = {
@@ -22,6 +22,8 @@ type InvoiceRow = {
 
 export default function InvoicesListPage() {
     const [q, setQ] = useState("");
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     const nf = useMemo(() => new Intl.NumberFormat('fr-FR'), []);
     const [rows, setRows] = useState<InvoiceRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -32,28 +34,31 @@ export default function InvoicesListPage() {
         return r.number.toLowerCase().includes(s) || r.customer.toLowerCase().includes(s);
     }), [q, rows]);
 
+    const loadInvoices = async (pageNum: number = 1) => {
+        setLoading(true); setError(null);
+        try {
+            const res = await fetch(`/api/tenant/invoices?page=${pageNum}&limit=10`, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erreur chargement');
+            const mapped: InvoiceRow[] = (data.items || []).map((i: any) => ({
+                id: i.id,
+                number: i.number || '(brouillon)',
+                customer: i.customer || '—',
+                issueDate: i.issueDate || null,
+                dueDate: i.dueDate || null,
+                status: i.status,
+                total: Number(i.total || i.totalTTC || 0),
+                balance: Number(i.balance || 0),
+            }));
+            setRows(mapped);
+            setTotalPages(data.totalPages || 1);
+        } catch (e: any) { setError(e.message); }
+        finally { setLoading(false); }
+    };
+
     useEffect(() => {
-        (async () => {
-            setLoading(true); setError(null);
-            try {
-                const res = await fetch('/api/tenant/invoices', { cache: 'no-store' });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Erreur chargement');
-                const mapped: InvoiceRow[] = (data || []).map((i: any) => ({
-                    id: i.id,
-                    number: i.number || '(brouillon)',
-                    customer: i.customer || '—',
-                    issueDate: i.issueDate || null,
-                    dueDate: i.dueDate || null,
-                    status: i.status,
-                    total: Number(i.total || i.totalTTC || 0),
-                    balance: Number(i.balance || 0),
-                }));
-                setRows(mapped);
-            } catch (e: any) { setError(e.message); }
-            finally { setLoading(false); }
-        })();
-    }, []);
+        loadInvoices(page);
+    }, [page]);
 
     const stats = useMemo(() => {
         const totalTTC = filtered.reduce((s, r) => s + r.total, 0);
@@ -124,7 +129,7 @@ export default function InvoicesListPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Liste</CardTitle>
-                    <CardDescription>{filtered.length} facture(s)</CardDescription>
+                    <CardDescription>{filtered.length} facture(s) - Page {page} sur {totalPages}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="w-full overflow-x-auto">
@@ -174,6 +179,31 @@ export default function InvoicesListPage() {
                                 ))}
                             </TableBody>
                         </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="flex items-center justify-between mt-4">
+                        <div className="text-sm text-gray-500">
+                            Page {page} sur {totalPages}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page <= 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" /> Précédent
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                disabled={page >= totalPages}
+                            >
+                                Suivant <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

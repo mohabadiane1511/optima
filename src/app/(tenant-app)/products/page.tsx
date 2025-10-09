@@ -37,7 +37,7 @@ export default function ProductsPage() {
 
     // Données mock pour graphiques (12 mois)
     // Chart dynamique: séries IN/OUT issues de l'API summary
-    const [granularity, setGranularity] = useState<'daily   ' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+    const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
     const [chartProductId, setChartProductId] = useState<string>('ALL');
     const [series, setSeries] = useState<{ date: string; in: number; out: number }[]>([]);
     const [chartLoading, setChartLoading] = useState(false);
@@ -113,7 +113,7 @@ export default function ProductsPage() {
         (async () => {
             setChartLoading(true);
             try {
-                const params = new URLSearchParams({ granularity, window: (granularity === 'daily' ? 7 : granularity === 'weekly' ? 12 : 12).toString() });
+                const params = new URLSearchParams({ granularity, window: (granularity  === 'daily' ? 7 : granularity === 'weekly' ? 12 : 12).toString() });
                 if (chartProductId && chartProductId !== 'ALL') params.set('productId', chartProductId);
                 const res = await fetch(`/api/tenant/stock-movements/summary?${params.toString()}`, { cache: 'no-store' });
                 const data = await res.json();
@@ -268,7 +268,7 @@ export default function ProductsPage() {
 
                                     // Grille + ticks
                                     const ticks = 5;
-                                    const grid: JSX.Element[] = [];
+                                    const grid: React.JSX.Element[] = [];
                                     for (let i = 0; i <= ticks; i++) {
                                         const y = 50 - (i / ticks) * 45;
                                         const val = Math.round((i / ticks) * maxVal);

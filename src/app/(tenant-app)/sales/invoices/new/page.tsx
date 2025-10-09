@@ -9,15 +9,22 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 type Line = { productId?: string; name: string; sku?: string; qty: number; unit: string; price: number; tva: number };
 type ProductOption = { id: string; name: string; sku: string; salePrice: number; unit: string };
+type Customer = { id: string; name: string; email?: string | null; phone?: string | null; address?: string | null };
 
 export default function NewInvoicePage() {
     const [customer, setCustomer] = useState("");
     const [dueDate, setDueDate] = useState<string>("");
     const [lines, setLines] = useState<Line[]>([]);
     const [products, setProducts] = useState<ProductOption[]>([]);
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [customerId, setCustomerId] = useState<string>("");
+    const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+    const [newCustomer, setNewCustomer] = useState({ name: "", email: "", phone: "", address: "" });
     const nf = useMemo(() => new Intl.NumberFormat('fr-FR'), []);
 
     const totals = useMemo(() => {
@@ -37,24 +44,39 @@ export default function NewInvoicePage() {
                 const res = await fetch('/api/tenant/products', { cache: 'no-store' });
                 const data = await res.json();
                 if (Array.isArray(data)) {
-                    setProducts(data.map((p: any) => ({ id: p.id, name: p.name, sku: p.sku, salePrice: Number(p.salePrice || 0), unit: p.unit || 'unité' })));
+                    const available = data.filter((p: any) => p.active && Number(p.qtyOnHand || 0) > 0);
+                    setProducts(available.map((p: any) => ({ id: p.id, name: p.name, sku: p.sku, salePrice: Number(p.salePrice || 0), unit: p.unit || 'unité' })));
                 }
             } catch { }
+            try {
+                const resC = await fetch('/api/tenant/customers', { cache: 'no-store' });
+                const dataC = await resC.json();
+                if (Array.isArray(dataC)) setCustomers(dataC);
+            } catch { }
         })();
+    }, []);
+
+    // Préremplir échéance J+14
+    useEffect(() => {
+        if (!dueDate) {
+            const d = new Date(); d.setDate(d.getDate() + 14);
+            setDueDate(d.toISOString().slice(0, 10));
+        }
     }, []);
 
     async function createDraft(): Promise<string | null> {
         try {
             const body = {
-                customer: { name: customer },
+                customer: customerId ? { id: customerId, name: customer || customers.find(c => c.id === customerId)?.name } : { name: customer },
                 dueDate: dueDate || null,
-                lines: lines.map(l => ({ name: l.name, sku: l.sku, qty: l.qty, unit: l.unit, price: l.price, tva: l.tva })),
+                lines: lines.map(l => ({ productId: l.productId, name: l.name, sku: l.sku, qty: l.qty, unit: l.unit, price: l.price, tva: l.tva })),
             };
             const res = await fetch('/api/tenant/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const data = await res.json();
-            if (!res.ok) { alert(data.error || 'Création impossible'); return null; }
+            if (!res.ok) { toast.error(data.error || 'Création impossible'); return null; }
+            toast.success('Brouillon enregistré');
             return data.id as string;
-        } catch (e: any) { alert('Erreur: ' + e.message); return null; }
+        } catch (e: any) { toast.error('Erreur: ' + e.message); return null; }
     }
 
     async function onSaveDraft() {
@@ -68,9 +90,10 @@ export default function NewInvoicePage() {
         try {
             const res = await fetch(`/api/tenant/invoices/${id}/issue`, { method: 'POST' });
             const data = await res.json();
-            if (!res.ok) { alert(data.error || 'Émission impossible'); return; }
+            if (!res.ok) { toast.error(data.error || 'Émission impossible'); return; }
+            toast.success('Facture émise');
             window.location.href = `/sales/invoices/${id}`;
-        } catch (e: any) { alert('Erreur: ' + e.message); }
+        } catch (e: any) { toast.error('Erreur: ' + e.message); }
     }
 
     return (
@@ -99,7 +122,22 @@ export default function NewInvoicePage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Client</Label>
-                                <Input placeholder="Rechercher ou saisir client" value={customer} onChange={(e) => setCustomer(e.target.value)} />
+                                <div className="flex gap-2">
+                                    <Select value={customerId || 'new'} onValueChange={(v) => {
+                                        if (v === 'new') { setCustomerId(''); setCustomer(''); }
+                                        else { setCustomerId(v); const c = customers.find(x => x.id === v); setCustomer(c?.name || ''); }
+                                    }}>
+                                        <SelectTrigger className="w-full"><SelectValue placeholder="Sélectionner client" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="new">— Nouveau client…</SelectItem>
+                                            {customers.map(c => (
+                                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button type="button" variant="outline" onClick={() => setCustomerDialogOpen(true)}>Nouveau</Button>
+                                </div>
+                                <Input className="mt-2" placeholder="Nom client (saisie libre)" value={customer} onChange={(e) => setCustomer(e.target.value)} />
                             </div>
                             <div className="space-y-2">
                                 <Label>Échéance</Label>
@@ -157,12 +195,8 @@ export default function NewInvoicePage() {
                                                         </Select>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="min-w-[120px]"><Input className="h-9" value={l.sku || ''} placeholder="SKU" onChange={(e) => {
-                                                    const v = e.target.value; setLines(p => p.map((x, i) => i === idx ? { ...x, sku: v } : x));
-                                                }} /></TableCell>
-                                                <TableCell className="text-right min-w-[90px]"><Input className="h-9" type="number" value={l.qty} onChange={(e) => {
-                                                    const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, qty: v } : x));
-                                                }} /></TableCell>
+                                                <TableCell className="min-w-[120px]"><Input className="h-9" value={l.sku || ''} placeholder="SKU" onChange={(e) => { const v = e.target.value; setLines(p => p.map((x, i) => i === idx ? { ...x, sku: v } : x)); }} disabled /></TableCell>
+                                                <TableCell className="text-right min-w-[90px]"><Input className="h-9" type="number" value={l.qty} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, qty: v } : x)); }} /></TableCell>
                                                 <TableCell className="min-w-[120px]">
                                                     <Select value={l.unit} onValueChange={(v) => setLines(p => p.map((x, i) => i === idx ? { ...x, unit: v } : x))}>
                                                         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -173,13 +207,9 @@ export default function NewInvoicePage() {
                                                         </SelectContent>
                                                     </Select>
                                                 </TableCell>
-                                                <TableCell className="text-right min-w-[120px]"><Input className="h-9" type="number" value={l.price} onChange={(e) => {
-                                                    const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, price: v } : x));
-                                                }} /></TableCell>
-                                                <TableCell className="text-right min-w-[100px]"><Input className="h-9" type="number" value={l.tva} onChange={(e) => {
-                                                    const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, tva: v } : x));
-                                                }} /></TableCell>
-                                                <TableCell className="text-right">{nf.format(Number(l.qty) * Number(l.price) * (1 + Number(l.tva) / 100))} FCFA</TableCell>
+                                                <TableCell className="text-right min-w-[120px]"><Input className="h-9" type="number" value={l.price} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, price: v } : x)); }} disabled /></TableCell>
+                                                <TableCell className="text-right min-w-[100px]"><Input className="h-9" type="number" value={l.tva} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, tva: v } : x)); }} /></TableCell>
+                                                <TableCell className="text-right">{nf.format(l.qty * l.price * (1 + l.tva / 100))} FCFA</TableCell>
                                                 <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => removeLine(idx)}><Trash className="h-4 w-4" /></Button></TableCell>
                                             </TableRow>
                                         ))}
@@ -204,6 +234,35 @@ export default function NewInvoicePage() {
                     </CardContent>
                 </Card>
             </div>
+            <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+                <DialogContent className="sm:max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>Nouveau client</DialogTitle>
+                        <DialogDescription>Créer un client rapidement</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <Input placeholder="Nom *" value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} />
+                        <Input placeholder="Email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} />
+                        <Input placeholder="Téléphone" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
+                        <Input placeholder="Adresse" value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCustomerDialogOpen(false)}>Annuler</Button>
+                        <Button onClick={async () => {
+                            if (!newCustomer.name.trim()) { toast.error('Nom requis'); return; }
+                            try {
+                                const res = await fetch('/api/tenant/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCustomer) });
+                                const data = await res.json();
+                                if (!res.ok) { toast.error(data.error || 'Création impossible'); return; }
+                                toast.success('Client créé');
+                                setCustomers(prev => [{ id: data.id, name: data.name, email: data.email, phone: data.phone, address: data.address }, ...prev]);
+                                setCustomerId(data.id); setCustomer(data.name || '');
+                                setCustomerDialogOpen(false); setNewCustomer({ name: '', email: '', phone: '', address: '' });
+                            } catch (e: any) { toast.error(e.message); }
+                        }}>Créer</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

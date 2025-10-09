@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { Prisma } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
@@ -16,10 +17,10 @@ async function resolveTenantId(request: NextRequest): Promise<string | null> {
   }
   let { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
   if (!tenantSlug && process.env.NODE_ENV !== 'production') {
-    tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || undefined;
+    tenantSlug = request.headers.get('x-tenant-slug') || process.env.DEFAULT_TENANT_SLUG || null;
   }
   if (!tenantSlug) return null;
-  const t = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+  const t = await db.tenant.findUnique({ where: { slug: tenantSlug } });
   return t?.id ?? null;
 }
 
@@ -58,14 +59,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Postgres date_trunc pour agréger IN/OUT par période
-    const rows: Array<{ bucket: Date; type: string; total: number }> = await prisma.$queryRaw(
+    const whereExtra = productId ? Prisma.sql`AND "productId" = ${productId}` : Prisma.sql``;
+    const rows: Array<{ bucket: Date; type: string; total: number }> = await db.$queryRaw(
       Prisma.sql`
-        SELECT date_trunc(${unit}, "createdAt") AS bucket,
+        SELECT date_trunc(${Prisma.raw(`'${unit}'`)}, "createdAt") AS bucket,
                "type",
                SUM(CAST("qty" AS numeric))::float AS total
         FROM "StockMovement"
         WHERE "tenantId" = ${tenantId}
-          ${productId ? Prisma.sql`AND "productId" = ${productId}` : Prisma.sql``}
+          ${whereExtra}
           AND "createdAt" >= ${fromDate}
         GROUP BY 1, 2
         ORDER BY 1 ASC;

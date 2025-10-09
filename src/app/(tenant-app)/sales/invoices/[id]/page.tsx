@@ -6,7 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Download } from "lucide-react";
+import { Printer, Download, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
 
 type Invoice = {
     id: string;
@@ -26,6 +31,19 @@ export default function InvoiceDetailPage() {
     const [inv, setInv] = useState<Invoice | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+    const [paymentAmount, setPaymentAmount] = useState("");
+
+    async function reload() {
+        try {
+            const res = await fetch(`/api/tenant/invoices/${id}`, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erreur chargement facture');
+            setInv(data);
+        } catch (e: any) {
+            setError(e.message);
+        }
+    }
 
     useEffect(() => {
         if (!id) return;
@@ -51,17 +69,61 @@ export default function InvoiceDetailPage() {
         return { total, paid, balance: Math.max(0, total - paid), tva };
     }, [inv]);
 
+    async function issueInvoice(): Promise<boolean> {
+        try {
+            const res = await fetch(`/api/tenant/invoices/${id}/issue`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Émission impossible');
+            toast.success('Facture émise');
+            await reload();
+            return true;
+        } catch (e: any) {
+            toast.error(e.message);
+            return false;
+        }
+    }
+
+    function openPaymentDialog() {
+        if (!inv) return;
+        if (inv.status === 'draft') {
+            const confirmIssue = confirm('La facture est en brouillon. Voulez-vous l\'émettre avant d\'enregistrer un paiement ?');
+            if (!confirmIssue) return;
+            issueInvoice().then(ok => {
+                if (ok) {
+                    setPaymentAmount(totals.balance.toString());
+                    setPaymentDialogOpen(true);
+                }
+            });
+            return;
+        }
+        if (totals.balance <= 0) {
+            toast.error('Solde déjà à 0 — aucun paiement requis.');
+            return;
+        }
+        setPaymentAmount(totals.balance.toString());
+        setPaymentDialogOpen(true);
+    }
+
     async function recordPayment() {
-        const amountStr = prompt('Montant payé (FCFA)');
-        if (!amountStr) return;
-        const amount = Number(amountStr);
-        if (!amount || amount <= 0) return alert('Montant invalide');
+        if (!inv) return;
+        const amount = Number(paymentAmount);
+        if (!amount || amount <= 0) {
+            toast.error('Montant invalide');
+            return;
+        }
+        if (amount > totals.balance) {
+            toast.error(`Montant saisi (${nf.format(amount)} FCFA) supérieur au solde (${nf.format(totals.balance)} FCFA).`);
+            return;
+        }
         try {
             const res = await fetch(`/api/tenant/invoices/${id}/payments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, method: 'cash' }) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erreur');
+            toast.success('Paiement enregistré');
+            setPaymentDialogOpen(false);
+            setPaymentAmount("");
             window.location.reload();
-        } catch (e: any) { alert(e.message); }
+        } catch (e: any) { toast.error(e.message); }
     }
 
     if (loading) return <div className="p-6 text-sm text-gray-500">Chargement…</div>;
@@ -70,16 +132,31 @@ export default function InvoiceDetailPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" onClick={() => history.back()}><ArrowLeft className="h-4 w-4" /></Button>
                     <h1 className="text-2xl font-bold">{inv.number || '(brouillon)'}</h1>
                     <p className="text-gray-600">{inv.issueDate ? `Facture du ${new Date(inv.issueDate).toLocaleDateString('fr-FR')}` : 'Brouillon non émis'}</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => history.back()}>Retour</Button>
                     <Button variant="outline"><Printer className="h-4 w-4 mr-2" /> Imprimer</Button>
                     <Button variant="outline"><Download className="h-4 w-4 mr-2" /> PDF</Button>
-                    {inv.status !== 'paid' && (
-                        <Button onClick={recordPayment}>Enregistrer paiement</Button>
+                    {inv.status === 'draft' && (
+                        <Button onClick={issueInvoice}>Émettre</Button>
+                    )}
+                    {(inv.status === 'draft' || inv.status === 'sent' || inv.status === 'overdue') && totals.paid === 0 && (
+                        <Button variant="destructive" onClick={async () => {
+                            if (!confirm('Confirmer l\'annulation de cette facture ?')) return;
+                            try {
+                                const res = await fetch(`/api/tenant/invoices/${id}/cancel`, { method: 'POST' });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Annulation impossible');
+                                toast.success('Facture annulée');
+                                await reload();
+                            } catch (e: any) { toast.error(e.message); }
+                        }}>Annuler</Button>
+                    )}
+                    {(inv.status === 'sent' || inv.status === 'overdue') && (
+                        <Button onClick={openPaymentDialog} disabled={totals.balance <= 0}>Enregistrer paiement</Button>
                     )}
                 </div>
             </div>
@@ -100,7 +177,7 @@ export default function InvoiceDetailPage() {
                             </div>
                             <div>
                                 <div className="text-sm text-gray-500">Statut</div>
-                                <Badge>{inv.status === 'draft' ? 'Brouillon' : inv.status === 'paid' ? 'Payée' : inv.status === 'overdue' ? 'Échue' : 'Émise'}</Badge>
+                                <Badge>{inv.status === 'draft' ? 'Brouillon' : inv.status === 'paid' ? 'Payée' : inv.status === 'overdue' ? 'Échue' : inv.status === 'cancelled' ? 'Annulée' : 'Émise'}</Badge>
                                 {inv.dueDate && <><div className="text-sm text-gray-500 mt-3">Échéance</div><div className="text-sm">{new Date(inv.dueDate).toLocaleDateString('fr-FR')}</div></>}
                             </div>
                         </div>
@@ -156,6 +233,40 @@ export default function InvoiceDetailPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Modal de paiement */}
+            <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Enregistrer un paiement</DialogTitle>
+                        <DialogDescription>
+                            Montant restant: {nf.format(totals.balance)} FCFA
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="amount">Montant payé (FCFA)</Label>
+                            <Input
+                                id="amount"
+                                type="number"
+                                value={paymentAmount}
+                                onChange={(e) => setPaymentAmount(e.target.value)}
+                                placeholder="0"
+                                min="0"
+                                max={totals.balance}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+                            Annuler
+                        </Button>
+                        <Button onClick={recordPayment}>
+                            Enregistrer
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
