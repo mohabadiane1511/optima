@@ -30,16 +30,23 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(50, Math.max(1, Number(searchParams.get('limit') || 10)));
     const skip = (page - 1) * limit;
 
+    // optional status filter (?status=paid or ?status=paid,overdue)
+    const statusParam = searchParams.get('status');
+    const statuses = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const db = prisma as any;
+    const where: any = { tenantId };
+    if (statuses.length) where.status = { in: statuses };
+
     const [invoices, total] = await Promise.all([
       db.invoice.findMany({
-        where: { tenantId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
         select: { id: true, number: true, status: true, issueDate: true, dueDate: true, totalTTC: true, customer: { select: { name: true } } }
       }),
-      db.invoice.count({ where: { tenantId } })
+      db.invoice.count({ where })
     ]);
 
     const ids = (invoices as any[]).map((i: any) => i.id);
