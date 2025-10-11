@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
 
 type Invoice = {
@@ -33,6 +34,14 @@ export default function InvoiceDetailPage() {
     const [error, setError] = useState<string | null>(null);
     const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState("");
+    const [paymentMethod, setPaymentMethod] = useState("cash");
+
+    const paymentMethods = [
+        { value: "cash", label: "Espèces" },
+        { value: "mobile", label: "(Wave, Orange Money)" },
+        { value: "card", label: "Carte bancaire" },
+        { value: "transfer", label: "Virement bancaire" }
+    ];
 
     async function reload() {
         try {
@@ -116,7 +125,7 @@ export default function InvoiceDetailPage() {
             return;
         }
         try {
-            const res = await fetch(`/api/tenant/invoices/${id}/payments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, method: 'cash' }) });
+            const res = await fetch(`/api/tenant/invoices/${id}/payments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, method: paymentMethod }) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erreur');
             toast.success('Paiement enregistré');
@@ -139,7 +148,7 @@ export default function InvoiceDetailPage() {
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline"><Printer className="h-4 w-4 mr-2" /> Imprimer</Button>
-                    <Button variant="outline"><Download className="h-4 w-4 mr-2" /> PDF</Button>
+                    <Button variant="outline" onClick={() => window.open(`/api/tenant/invoices/${id}/pdf`, '_blank')}><Download className="h-4 w-4 mr-2" /> PDF</Button>
                     {inv.status === 'draft' && (
                         <Button onClick={issueInvoice}>Émettre</Button>
                     )}
@@ -255,6 +264,21 @@ export default function InvoiceDetailPage() {
                                 min="0"
                                 max={totals.balance}
                             />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="method">Méthode de paiement</Label>
+                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Sélectionner méthode" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {paymentMethods.map(method => (
+                                        <SelectItem key={method.value} value={method.value}>
+                                            {method.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                     <DialogFooter>
