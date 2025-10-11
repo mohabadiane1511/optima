@@ -25,6 +25,7 @@ export default function InvoicesListPage() {
     const [q, setQ] = useState("");
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [totalInvoices, setTotalInvoices] = useState(0);
     const nf = useMemo(() => new Intl.NumberFormat('fr-FR'), []);
     const [rows, setRows] = useState<InvoiceRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -64,7 +65,8 @@ export default function InvoicesListPage() {
                 balance: Number(i.balance || 0),
             }));
             setRows(mapped);
-            setTotalPages(data.totalPages || 1);
+            setTotalPages(data.pagination?.totalPages || 1);
+            setTotalInvoices(data.pagination?.total || 0);
         } catch (e: any) { setError(e.message); }
         finally { setLoading(false); }
     };
@@ -87,7 +89,7 @@ export default function InvoicesListPage() {
 
     const stats = useMemo(() => {
         const totalTTC = filtered.filter(r => r.status === 'paid').reduce((s, r) => s + r.total, 0);
-        const totalSolde = filtered.reduce((s, r) => s + r.balance, 0);
+        const totalSolde = filtered.reduce((s, r) => r.status !== 'cancelled' && r.status !== 'draft' ? s + r.balance : s, 0);
         const nbPayees = filtered.filter(r => r.status === 'paid').length;
         const nbEchues = filtered.filter(r => r.status === 'overdue').length;
         return { totalTTC, totalSolde, nbPayees, nbEchues };
@@ -235,7 +237,7 @@ export default function InvoicesListPage() {
             {/* Statistiques + Graphes */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">Chiffre d'affaires (fenêtre)</CardTitle></CardHeader>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Chiffre d'affaires</CardTitle></CardHeader>
                     <CardContent><div className="text-2xl font-bold">{nf.format(summaryTotalPaid)} FCFA</div><CardDescription>Aligné sur le graphe ({granularity === 'monthly' ? '12 mois' : granularity === 'weekly' ? '12 semaines' : granularity === 'daily' ? '7 jours' : '5 ans'})</CardDescription></CardContent>
                 </Card>
                 <Card>
@@ -310,7 +312,7 @@ export default function InvoicesListPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Liste</CardTitle>
-                    <CardDescription>{filtered.length} facture(s) - Page {page} sur {totalPages}</CardDescription>
+                    <CardDescription>{totalInvoices} facture(s) - Page {page} sur {totalPages}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="w-full overflow-x-auto">
