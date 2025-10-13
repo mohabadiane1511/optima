@@ -45,7 +45,19 @@ export async function PUT(
 ) {
   try {
     const data = await request.json();
-    const { name, slug, description, contactEmail, contactPhone, status } = data;
+    const { 
+      name, 
+      slug, 
+      description, 
+      contactEmail, 
+      contactPhone, 
+      businessRegistration,
+      ninea,
+      address,
+      website,
+      logoUrl,
+      status 
+    } = data;
 
     // Vérifier que le slug est unique (sauf pour le tenant actuel)
     if (slug) {
@@ -73,6 +85,11 @@ export async function PUT(
         description,
         contactEmail,
         contactPhone,
+        businessRegistration,
+        ninea,
+        address,
+        website,
+        logoUrl,
         status,
       },
       include: {

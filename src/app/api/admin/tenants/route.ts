@@ -47,7 +47,18 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { name, slug, description, contactEmail, contactPhone } = data;
+    const { 
+      name, 
+      slug, 
+      description, 
+      contactEmail, 
+      contactPhone,
+      businessRegistration,
+      ninea,
+      address,
+      website,
+      logoUrl
+    } = data;
 
     // Vérifier que le slug est unique
     const existingTenant = await prisma.tenant.findUnique({
@@ -83,6 +94,11 @@ export async function POST(request: NextRequest) {
           description,
           contactEmail,
           contactPhone,
+          businessRegistration,
+          ninea,
+          address,
+          website,
+          logoUrl,
           status: 'active',
         },
       });
