@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { logAuditEvent } from '@/lib/audit';
 
 const db = prisma as any;
 
@@ -137,6 +138,9 @@ export async function POST(request: NextRequest) {
 
     // Recharger infos sérialisées
     const s = await db.stock.findFirst({ where: { tenantId: tenant.id, productId: created.id } });
+
+    // Audit: création produit
+    await logAuditEvent({ tenantId: tenant.id, action: 'product.created', entity: 'product', entityId: created.id, metadata: { sku, name } }, request);
     return NextResponse.json(
       {
         id: created.id,

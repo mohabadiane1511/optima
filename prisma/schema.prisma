@@ -25,6 +25,7 @@ model Tenant {
   updatedAt    DateTime @updatedAt
   memberships  Membership[]
   domains      Domain[]
+  auditLogs    AuditLog[]
 }
 
 model User {
@@ -194,4 +195,34 @@ model Payment {
   @@index([tenantId, invoiceId])
 }
 
+
+// Journalisation des actions (audit)
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  actorId    String?
+  actorName  String?
+  actorEmail String?
+  actorType  String   @default("user") // user | system | anonymous
+  action     String
+  entity     String
+  entityId   String?
+  source     String?  // api | ui | job | webhook
+  route      String?
+  method     String?
+  ip         String?
+  userAgent  String?
+  requestId  String?
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action, createdAt])
+  @@index([tenantId, entity, entityId, createdAt])
+  @@index([requestId])
+}
 

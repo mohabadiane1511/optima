@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, Boxes, Users, Settings, Receipt } from 'lucide-react';
+import { LayoutDashboard, Package, Boxes, Users, Settings, Receipt, FileText } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-const nav = [
+const baseNav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Produits & Stocks', href: '/products', icon: Package },
     { name: 'Ventes / Factures', href: '/sales/invoices', icon: Receipt },
@@ -16,6 +17,19 @@ const nav = [
 
 export function TenantSidebar() {
     const pathname = usePathname();
+    const [role, setRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch('/api/tenant/me', { cache: 'no-store' });
+                const data = await res.json();
+                setRole(data.role || null);
+            } catch { setRole(null); }
+        })();
+    }, []);
+
+    const nav = role === 'admin' ? [...baseNav, { name: 'Journal', href: '/journal', icon: FileText }] : baseNav;
     return (
         <aside className="w-64 bg-white border-r border-gray-200 h-full hidden md:flex flex-col">
             <nav className="p-4 space-y-2 flex-1 overflow-y-auto">

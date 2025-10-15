@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 import { setTenantSessionCookie } from '@/lib/tenant/cookies';
+import { logAuditEvent } from '@/lib/audit';
 
 const prisma = new PrismaClient();
 
@@ -45,8 +46,30 @@ export async function POST(request: NextRequest) {
     };
     await setTenantSessionCookie(Buffer.from(JSON.stringify(payload)).toString('base64'));
 
+    // Audit: connexion réussie
+    await logAuditEvent({
+      tenantId: tenant.id,
+      action: 'auth.login.success',
+      entity: 'user',
+      entityId: user.id,
+      actorId: user.id,
+      actorName: user.name || null,
+      actorEmail: user.email || null,
+    }, request as any);
+
     return NextResponse.json({ ok: true, mustChangePassword: payload.mustChangePassword });
   } catch (e) {
+    // Audit: échec de connexion
+    try {
+      const { email } = await request.json();
+      const { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
+      if (tenantSlug) {
+        const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+        if (tenant) {
+          await logAuditEvent({ tenantId: tenant.id, action: 'auth.login.failed', entity: 'user', metadata: { email } }, request as any);
+        }
+      }
+    } catch {}
     console.error('Erreur login tenant:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }

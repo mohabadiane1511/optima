@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { logAuditEvent } from '@/lib/audit';
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
@@ -49,6 +50,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return tx.invoice.update({ where: { id: inv.id }, data: { status: 'cancelled' }, select: { id: true, status: true } });
     });
 
+    // Audit: annulation facture
+    await logAuditEvent({ tenantId, action: 'invoice.cancelled', entity: 'invoice', entityId: updated.id, metadata: { number: inv.number } }, request);
     return NextResponse.json(updated);
   } catch (e) {
     console.error('POST /api/tenant/invoices/[id]/cancel', e);

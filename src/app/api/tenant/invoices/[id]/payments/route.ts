@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { logAuditEvent } from '@/lib/audit';
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
@@ -34,11 +35,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const remaining = Math.max(0, total - paid);
     if (amount > remaining) return NextResponse.json({ error: 'Montant supérieur au solde restant' }, { status: 400 });
 
-    await db.payment.create({ data: { tenantId, invoiceId: invoice.id, amount, method: method || 'cash', reference: reference || null, paidAt: paidAt ? new Date(paidAt) : new Date() } });
+    const pay = await db.payment.create({ data: { tenantId, invoiceId: invoice.id, amount, method: method || 'cash', reference: reference || null, paidAt: paidAt ? new Date(paidAt) : new Date() } });
 
     const newPaid = paid + amount;
     const newStatus = newPaid >= total ? 'paid' : (invoice.status === 'draft' ? 'draft' : 'sent');
     await db.invoice.update({ where: { id: invoice.id }, data: { status: newStatus } });
+
+    // Audit: paiement enregistré (inclure numéro de facture si disponible)
+    await logAuditEvent({ tenantId, action: 'payment.recorded', entity: 'payment', entityId: pay.id, metadata: { invoiceId: invoice.id, invoiceNumber: invoice.number || null, amount, method } }, request);
 
     return NextResponse.json({ ok: true, paid: newPaid, remaining: Math.max(0, total - newPaid) });
   } catch (e) {
