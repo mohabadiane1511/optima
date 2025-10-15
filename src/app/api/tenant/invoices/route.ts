@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { logAuditEvent } from '@/lib/audit';
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
@@ -172,6 +173,14 @@ export async function POST(request: NextRequest) {
       },
       select: { id: true }
     });
+
+    // Audit: création de facture (brouillon)
+    await logAuditEvent({
+      tenantId,
+      action: 'invoice.created',
+      entity: 'invoice',
+      entityId: inv.id,
+    }, request);
 
     return NextResponse.json({ id: inv.id }, { status: 201 });
   } catch (e) {

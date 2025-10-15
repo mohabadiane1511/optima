@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { logAuditEvent } from '@/lib/audit';
 
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
@@ -62,6 +63,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       return upd;
     });
+
+    // Audit: émission
+    await logAuditEvent({ tenantId, action: 'invoice.issued', entity: 'invoice', entityId: updated.id, metadata: { number: updated.number } }, request);
 
     return NextResponse.json(updated);
   } catch (e) {
