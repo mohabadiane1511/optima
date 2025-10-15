@@ -26,6 +26,9 @@ export default function JournalPage() {
     // Utiliser une valeur sentinelle 'all' plutôt que chaîne vide
     const [action, setAction] = useState<string>('all');
     const [entity, setEntity] = useState<string>('all');
+    const [retentionCount, setRetentionCount] = useState<number>(0);
+    const [retentionCutoff, setRetentionCutoff] = useState<string>('');
+    const [purging, setPurging] = useState(false);
 
     const load = async () => {
         const params = new URLSearchParams();
@@ -41,6 +44,34 @@ export default function JournalPage() {
     };
 
     useEffect(() => { load(); }, [page, action, entity]);
+
+    // Charger les stats de rétention (30 jours)
+    const loadRetention = async () => {
+        const res = await fetch('/api/tenant/audit-logs/stats', { cache: 'no-store' });
+        if (res.ok) {
+            const data = await res.json();
+            setRetentionCount((data.count || 0) + (data.countSoon || 0));
+            setRetentionCutoff(data.purgeAt ? new Date(data.purgeAt).toLocaleDateString('fr-FR') : (data.cutoff ? new Date(data.cutoff).toLocaleDateString('fr-FR') : ''));
+        }
+    };
+    useEffect(() => { loadRetention(); }, []);
+
+    const purgeOld = async () => {
+        if (!confirm('Supprimer définitivement les événements plus vieux que 30 jours ?')) return;
+        setPurging(true);
+        try {
+            const res = await fetch('/api/tenant/audit-logs/purge', { method: 'POST' });
+            if (res.ok) {
+                await load();
+                await loadRetention();
+                alert('Purge effectuée.');
+            } else {
+                alert("Erreur lors de la purge");
+            }
+        } finally {
+            setPurging(false);
+        }
+    };
 
     const actorLabel = (l: LogItem) => l.actorName || l.actorEmail || 'Un utilisateur';
     const money = (n: number) => new Intl.NumberFormat('fr-FR').format(n);
@@ -81,6 +112,18 @@ export default function JournalPage() {
     return (
         <div className="p-6 space-y-4">
             <h1 className="text-2xl font-semibold">Journal</h1>
+            {retentionCount > 0 && (
+                <Card className="p-4 bg-amber-50 border-amber-200">
+                    <div className="flex items-center justify-between">
+                        <div className="text-sm text-amber-900">
+                            {retentionCount} événement(s) seront supprimés automatiquement le {retentionCutoff}.
+                        </div>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => window.open('/api/tenant/audit-logs/export?olderThan=30d', '_blank')}>Exporter avant suppression totale</Button>
+                        </div>
+                    </div>
+                </Card>
+            )}
             <div className="flex gap-2">
                 <Select value={action} onValueChange={(v) => setAction(v)}>
                     <SelectTrigger className="w-64"><SelectValue placeholder="Action" /></SelectTrigger>

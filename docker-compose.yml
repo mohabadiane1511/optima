@@ -50,6 +50,26 @@ services:
     depends_on:
       - db
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: optima-scheduler
+    restart: unless-stopped
+    command: node scripts/audit-scheduler.mjs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://optima:optima@db:5432/optima?schema=public
+      - NODE_ENV=development
+      - AUDIT_RETENTION_DAYS=30
+      - AUDIT_WARN_DAYS=2
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - db
+
 volumes:
   db-data:
 
