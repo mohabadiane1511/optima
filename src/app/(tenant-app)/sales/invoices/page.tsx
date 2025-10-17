@@ -35,7 +35,7 @@ export default function InvoicesListPage() {
     const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
     const windowByGranularity: Record<typeof granularity, number> = { daily: 7, weekly: 12, monthly: 12, yearly: 5 } as any;
 
-    const [summary, setSummary] = useState<{ revenue: { date: string; total: number }[]; statuses: Record<string, number>; granularity: string } | null>(null);
+    const [summary, setSummary] = useState<{ revenue: { date: string; total: number }[]; statuses: Record<string, number>; paymentMethods?: { method: string; total: number }[]; productMargins?: { productId: string; name: string | null; sku: string | null; revenue: number; cost: number; margin: number }[]; topProducts?: { productId: string; name: string | null; sku: string | null; qty: number; revenue: number }[]; granularity: string } | null>(null);
 
     // Tooltip état
     const [tip, setTip] = useState<{ x: number; y: number; label: string; value: number } | null>(null);
@@ -82,7 +82,7 @@ export default function InvoicesListPage() {
                 const window = windowByGranularity[granularity];
                 const res = await fetch(`/api/tenant/invoices/summary?granularity=${granularity}&window=${window}`, { cache: 'no-store' });
                 const data = await res.json();
-                if (res.ok) setSummary({ revenue: data.revenue || [], statuses: data.statuses || {}, granularity: data.granularity });
+                if (res.ok) setSummary({ revenue: data.revenue || [], statuses: data.statuses || {}, paymentMethods: data.paymentMethods || [], productMargins: data.productMargins || [], topProducts: data.topProducts || [], granularity: data.granularity });
             } catch { }
         })();
     }, [granularity]);
@@ -221,6 +221,65 @@ export default function InvoicesListPage() {
         );
     };
 
+    const PaymentMethodsDonut = () => {
+        if (!summary || !summary.paymentMethods) return <div className="text-sm text-gray-500">Aucune donnée</div>;
+        const items = summary.paymentMethods.length ? summary.paymentMethods : [];
+        const labelMap: Record<string, string> = { cash: 'Espèces', card: 'Carte', transfer: 'Virement', mobile: 'Mobile', other: 'Autre' };
+        const colorPool = ['#0ea5e9', '#10b981', '#f59e0b', '#6366f1', '#ef4444', '#14b8a6', '#f43f5e'];
+        const colors: Record<string, string> = {};
+        items.forEach((it, i) => { colors[it.method] = colorPool[i % colorPool.length]; });
+        const values = items.map(it => Number(it.total || 0));
+        const total = Math.max(1, values.reduce((s, v) => s + v, 0));
+        const cx = 90, cy = 90, r = 60; let start = 0;
+        const segs = items.map((it) => { const v = Number(it.total || 0); const angle = (v / total) * Math.PI * 2; const end = start + angle; const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start); const x2 = cx + r * Math.cos(end), y2 = cy + r * Math.sin(end); const large = angle > Math.PI ? 1 : 0; const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`; start = end; return { d, color: colors[it.method] || '#ddd', label: it.method, v }; });
+        return (
+            <div className="flex items-center gap-4">
+                <svg width={180} height={180} viewBox="0 0 180 180">
+                    {segs.map((s, i) => <path key={i} d={s.d} fill={s.color} />)}
+                </svg>
+                <div className="space-y-1 text-sm">
+                    {items.map((it) => (
+                        <div key={it.method} className="flex items-center gap-2">
+                            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: colors[it.method] }}></span>
+                            {labelMap[it.method] || it.method}: {nf.format(Number(it.total || 0))} FCFA
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const ProductMarginsChart = () => {
+        if (!summary || !summary.productMargins || summary.productMargins.length === 0) return <div className="text-sm text-gray-500">Aucune donnée</div>;
+        const items = [...summary.productMargins];
+        const W = 640, H = 240, padL = 140, padR = 18, padT = 10, padB = 20;
+        const plotW = W - padL - padR, plotH = H - padT - padB;
+        const barH = Math.min(22, Math.max(12, Math.floor(plotH / Math.max(1, items.length + 1))));
+        const gap = Math.max(6, Math.floor((plotH - barH * items.length) / Math.max(1, items.length + 1)));
+        const maxAbs = Math.max(1, ...items.map(it => Math.abs(Number(it.margin || 0))));
+        const xScale = (v: number) => padL + (v / maxAbs) * plotW * 0.95;
+        return (
+            <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+                <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#cbd5e1" />
+                {items.map((it, i) => {
+                    const y = padT + gap * (i + 1) + barH * i;
+                    const m = Number(it.margin || 0);
+                    const w = Math.max(0, xScale(Math.abs(m)) - padL);
+                    const color = m >= 0 ? '#10b981' : '#ef4444';
+                    return (
+                        <g key={it.productId || i}>
+                            <text x={padL - 8} y={y + barH / 2} textAnchor="end" dominantBaseline="middle" fontSize={11} fill="#374151">
+                                {(it.name || it.sku || it.productId || 'Produit')}
+                            </text>
+                            <rect x={padL} y={y} width={w} height={barH} rx={2} fill={color} />
+                            <text x={padL + w + 6} y={y + barH / 2} dominantBaseline="middle" fontSize={10} fill="#6b7280">{nf.format(m)} FCFA</text>
+                        </g>
+                    );
+                })}
+            </svg>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -249,8 +308,23 @@ export default function InvoicesListPage() {
                     <CardContent><div className="text-2xl font-bold">{stats.nbPayees}</div><CardDescription>Sur la sélection</CardDescription></CardContent>
                 </Card>
                 <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">Factures échues</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{stats.nbEchues}</div><CardDescription>Non réglées à échéance</CardDescription></CardContent>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Top 3 produits</CardTitle></CardHeader>
+                    <CardContent>
+                        <div className="space-y-2 text-sm">
+                            {(summary?.topProducts || []).slice(0, 3).map((p, i) => (
+                                <div key={p.productId || i} className="flex items-center justify-between">
+                                    <div className="truncate max-w-[60%]" title={p.name || p.sku || p.productId || 'Produit'}>{p.name || p.sku || p.productId || 'Produit'}</div>
+                                    <div className="text-right">
+                                        <div className="font-medium">{nf.format(Number(p.revenue || 0))} FCFA</div>
+                                        <div className="text-gray-500">{nf.format(Number(p.qty || 0))} u.</div>
+                                    </div>
+                                </div>
+                            ))}
+                            {(!summary || (summary.topProducts || []).length === 0) && (
+                                <div className="text-gray-500">Aucune vente</div>
+                            )}
+                        </div>
+                    </CardContent>
                 </Card>
             </div>
 
@@ -263,7 +337,7 @@ export default function InvoicesListPage() {
             </div>
 
             {/* Graphes */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card>
                     <CardHeader>
                         <CardTitle>CA réalisé dans le temps</CardTitle>
@@ -282,7 +356,26 @@ export default function InvoicesListPage() {
                         <StatusDonut />
                     </CardContent>
                 </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Méthodes de paiement</CardTitle>
+                        <CardDescription>Somme des montants par méthode</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <PaymentMethodsDonut />
+                    </CardContent>
+                </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Marge brute par produit</CardTitle>
+                    <CardDescription>Top 10 produits (factures payées)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ProductMarginsChart />
+                </CardContent>
+            </Card>
 
             <Card>
                 <CardHeader className="pb-2">
