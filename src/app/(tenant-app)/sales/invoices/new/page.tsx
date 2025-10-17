@@ -34,7 +34,7 @@ export default function NewInvoicePage() {
         return { ht, tva, ttc };
     }, [lines]);
 
-    const addLine = () => setLines(prev => [...prev, { name: "", qty: 1, unit: "unité", price: 0, tva: 0 }]);
+    const addLine = () => setLines(prev => [...prev, { name: "", qty: 1, unit: "unité", price: 0, tva: 18 }]);
     const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
 
     // Charger produits pour le sélecteur

@@ -138,7 +138,9 @@ export async function POST(request: NextRequest) {
     const computed = (lines as any[]).map((l: any) => {
       const qty = Number(l.qty || 0);
       const unitPrice = Number(l.price || 0);
-      const rate = Number(l.tva || 0);
+      // Si aucune TVA fournie, appliquer 18% par défaut
+      const hasTva = l.tva !== undefined && l.tva !== null && l.tva !== '';
+      const rate = Number(hasTva ? l.tva : 18);
       const totalHT = qty * unitPrice;
       const totalTVA = totalHT * (rate / 100);
       const totalTTC = totalHT + totalTVA;

@@ -70,11 +70,69 @@ export async function GET(request: NextRequest) {
       `
     );
 
+    // Répartition des méthodes de paiement (fenêtre identique sur paidAt)
+    const paymentMethodRows: Array<{ method: string; total: number }> = await db.$queryRaw(
+      Prisma.sql`
+        SELECT "method"::text AS method,
+               SUM(CAST("amount" AS numeric))::float AS total
+        FROM "Payment"
+        WHERE "tenantId" = ${tenantId}
+          AND "paidAt" >= ${fromDate}
+        GROUP BY 1;
+      `
+    );
+
+    // Marges par produit (basées sur factures payées dans la fenêtre)
+    const productMarginsRows: Array<{ productId: string; name: string | null; sku: string | null; revenue: number; cost: number; margin: number }> = await db.$queryRaw(
+      Prisma.sql`
+        SELECT l."productId"::text AS "productId",
+               p."name"::text AS name,
+               p."sku"::text AS sku,
+               SUM(CAST(l."qty" AS numeric) * CAST(l."unitPrice" AS numeric))::float AS revenue,
+               SUM(CAST(l."qty" AS numeric) * CAST(pr."purchasePrice" AS numeric))::float AS cost,
+               (SUM(CAST(l."qty" AS numeric) * CAST(l."unitPrice" AS numeric)) - SUM(CAST(l."qty" AS numeric) * CAST(pr."purchasePrice" AS numeric)))::float AS margin
+        FROM "InvoiceLine" l
+        JOIN "Invoice" i ON i."id" = l."invoiceId"
+        LEFT JOIN "Product" pr ON pr."id" = l."productId"
+        LEFT JOIN "Product" p ON p."id" = l."productId"
+        WHERE l."tenantId" = ${tenantId}
+          AND i."tenantId" = ${tenantId}
+          AND i."status" = 'paid'
+          AND l."productId" IS NOT NULL
+          AND COALESCE(i."issueDate", i."createdAt") >= ${fromDate}
+        GROUP BY l."productId", p."name", p."sku"
+        ORDER BY margin DESC
+        LIMIT 10;
+      `
+    );
+
+    // Top produits (CA et quantités) sur la même fenêtre et factures payées
+    const topProductsRows: Array<{ productId: string; name: string | null; sku: string | null; qty: number; revenue: number }> = await db.$queryRaw(
+      Prisma.sql`
+        SELECT l."productId"::text AS "productId",
+               p."name"::text AS name,
+               p."sku"::text AS sku,
+               SUM(CAST(l."qty" AS numeric))::float AS qty,
+               SUM(CAST(l."qty" AS numeric) * CAST(l."unitPrice" AS numeric))::float AS revenue
+        FROM "InvoiceLine" l
+        JOIN "Invoice" i ON i."id" = l."invoiceId"
+        LEFT JOIN "Product" p ON p."id" = l."productId"
+        WHERE l."tenantId" = ${tenantId}
+          AND i."tenantId" = ${tenantId}
+          AND i."status" = 'paid'
+          AND l."productId" IS NOT NULL
+          AND COALESCE(i."issueDate", i."createdAt") >= ${fromDate}
+        GROUP BY l."productId", p."name", p."sku"
+        ORDER BY revenue DESC
+        LIMIT 3;
+      `
+    );
+
     const revenue = revenueRows.map(r => ({ date: new Date(r.bucket).toISOString(), total: r.total ?? 0 }));
     const statuses: Record<string, number> = { draft: 0, sent: 0, paid: 0, overdue: 0, cancelled: 0 } as any;
     for (const r of statusRows) { (statuses as any)[r.status] = Number(r.count || 0); }
 
-    return NextResponse.json({ granularity, window, from: fromDate.toISOString(), revenue, statuses });
+    return NextResponse.json({ granularity, window, from: fromDate.toISOString(), revenue, statuses, paymentMethods: paymentMethodRows, productMargins: productMarginsRows, topProducts: topProductsRows });
   } catch (e) {
     console.error('GET /api/tenant/invoices/summary error', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
