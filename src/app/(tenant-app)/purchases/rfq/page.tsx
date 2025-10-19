@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -23,6 +23,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type RfqLine = {
     id: string;
@@ -34,37 +36,21 @@ type RfqLine = {
 
 type Rfq = {
     id: string;
-    number: string;
     suppliers: string[];
     status: "draft" | "sent" | "closed";
-    date: string; // ISO date
+    createdAt: string; // ISO
     note?: string;
     lines: RfqLine[];
+    number?: string; // legacy UI
 };
 
 const currency = (n: number) =>
     new Intl.NumberFormat("fr-FR").format(Math.round(n));
 
 export default function PurchasesRfqPage() {
-    const [rfqs, setRfqs] = useState<Rfq[]>([...
-        Array.from({ length: 5 }).map((_, i) => ({
-            id: `rfq_${i + 1}`,
-            number: `RFQ-2025-00${i + 1}`,
-            suppliers: ["Fournisseur A", i % 2 ? "Fournisseur B" : "Fournisseur C"],
-            status: (i % 3 === 0 ? "sent" : "draft") as Rfq["status"],
-            date: new Date(Date.now() - i * 86400000).toISOString(),
-            note: "Besoin urgent",
-            lines: [
-                {
-                    id: `l${i}-1`,
-                    item: "Article standard",
-                    quantity: 3 + i,
-                    estimatedPrice: 12000 + i * 500,
-                    taxRate: 18,
-                },
-            ],
-        }))
-    ]);
+    const [rfqs, setRfqs] = useState<Rfq[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const [statusFilter, setStatusFilter] = useState<"all" | Rfq["status"]>("all");
     const [search, setSearch] = useState("");
@@ -72,17 +58,73 @@ export default function PurchasesRfqPage() {
         return rfqs.filter((r) => {
             const sOk = statusFilter === "all" || r.status === statusFilter;
             const q = search.trim().toLowerCase();
-            const qOk = !q || r.number.toLowerCase().includes(q) || r.suppliers.join(", ").toLowerCase().includes(q);
+            const num = r.number || r.id;
+            const qOk = !q || num.toLowerCase().includes(q) || r.suppliers.join(", ").toLowerCase().includes(q);
             return sOk && qOk;
         });
     }, [rfqs, statusFilter, search]);
 
-    // Création RFQ (fake)
+    // Chargement initial liste
+    useEffect(() => {
+        const controller = new AbortController();
+        const fetchRfqs = async () => {
+            try {
+                setLoading(true); setError(null);
+                const params = new URLSearchParams();
+                if (statusFilter !== 'all') params.set('status', statusFilter);
+                if (search.trim()) params.set('q', search.trim());
+                const res = await fetch(`/api/tenant/purchases/rfqs?${params.toString()}`, { signal: controller.signal });
+                if (!res.ok) throw new Error('Erreur chargement RFQ');
+                const data = await res.json();
+                const items = (data?.items || []).map((it: any) => ({
+                    id: it.id,
+                    suppliers: it.suppliers || [],
+                    status: it.status,
+                    createdAt: it.createdAt,
+                    note: it.note || undefined,
+                    lines: [],
+                    number: it.id.substring(0, 8).toUpperCase(),
+                })) as Rfq[];
+                setRfqs(items);
+            } catch (e: any) {
+                if (e?.name !== 'AbortError') setError(e?.message || 'Erreur');
+            } finally { setLoading(false); }
+        };
+        fetchRfqs();
+        return () => controller.abort();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [statusFilter, search]);
+
+    // Création RFQ (API) + auto-complétion fournisseurs
     const [createOpen, setCreateOpen] = useState(false);
-    const [cSuppliers, setCSuppliers] = useState<string>("");
+    const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
+    const [supplierQuery, setSupplierQuery] = useState("");
+    const [supplierLoading, setSupplierLoading] = useState(false);
+    const [supplierSuggestions, setSupplierSuggestions] = useState<{ id: string; name: string }[]>([]);
+    // Auto-complétion fournisseurs (recherche)
+    useEffect(() => {
+        if (!supplierQuery.trim()) { setSupplierSuggestions([]); return; }
+        const ctrl = new AbortController();
+        const t = setTimeout(async () => {
+            try {
+                setSupplierLoading(true);
+                const params = new URLSearchParams({ q: supplierQuery.trim(), limit: "8" });
+                const res = await fetch(`/api/tenant/suppliers?${params}`, { signal: ctrl.signal });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                const items = (data?.items || []).map((s: any) => ({ id: s.id, name: s.name }));
+                setSupplierSuggestions(items);
+            } catch {
+                setSupplierSuggestions([]);
+            } finally {
+                setSupplierLoading(false);
+            }
+        }, 250);
+        return () => { clearTimeout(t); ctrl.abort(); };
+    }, [supplierQuery]);
     const [cNote, setCNote] = useState<string>("");
     const [cLines, setCLines] = useState<RfqLine[]>([
-        { id: "c1", item: "Article", quantity: 1, estimatedPrice: 10000, taxRate: 18 },
+        { id: "c1", item: "Article", quantity: 1, estimatedPrice: 0, taxRate: 18 },
     ]);
 
     const addLine = () => {
@@ -96,35 +138,64 @@ export default function PurchasesRfqPage() {
     const totalRfq = (r: Rfq) => r.lines.reduce((s, l) => s + totalLine(l), 0);
     const totalCreate = cLines.reduce((s, l) => s + totalLine(l), 0);
 
-    const createRfq = () => {
-        const id = `rfq_${rfqs.length + 1}`;
-        const number = `RFQ-2025-${String(rfqs.length + 1).padStart(4, "0")}`;
-        const suppliers = cSuppliers
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-        const newR: Rfq = {
-            id,
-            number,
-            suppliers: suppliers.length ? suppliers : ["Fournisseur X"],
-            status: "draft",
-            date: new Date().toISOString(),
+    const createRfq = async () => {
+        const suppliers = selectedSuppliers.length ? selectedSuppliers : [];
+        const payload = {
+            suppliers,
             note: cNote || undefined,
-            lines: cLines,
+            lines: cLines.map((l) => ({ item: l.item, quantity: l.quantity, estimatedPrice: l.estimatedPrice, taxRate: l.taxRate }))
         };
-        setRfqs((prev) => [newR, ...prev]);
-        // reset
-        setCSuppliers("");
-        setCNote("");
-        setCLines([{ id: "c1", item: "Article", quantity: 1, estimatedPrice: 10000, taxRate: 18 }]);
+        const res = await fetch('/api/tenant/purchases/rfqs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) { toast.error('Erreur lors de la création de la RFQ'); return; }
+        // recharger la liste
         setCreateOpen(false);
+        setSelectedSuppliers([]); setSupplierQuery(""); setSupplierSuggestions([]); setCNote(""); setCLines([{ id: 'c1', item: 'Article', quantity: 1, estimatedPrice: 0, taxRate: 18 }]);
+        const refresh = await fetch('/api/tenant/purchases/rfqs');
+        if (refresh.ok) {
+            const data = await refresh.json();
+            const items = (data?.items || []).map((it: any) => ({
+                id: it.id,
+                suppliers: it.suppliers || [],
+                status: it.status,
+                createdAt: it.createdAt,
+                note: it.note || undefined,
+                lines: [],
+                number: it.id.substring(0, 8).toUpperCase(),
+            })) as Rfq[];
+            setRfqs(items);
+        }
+        toast.success('Brouillon RFQ créé');
     };
 
     // Détail RFQ (fake)
     const [detail, setDetail] = useState<Rfq | null>(null);
-    const setStatus = (r: Rfq, s: Rfq["status"]) => {
+    const loadDetail = async (id: string) => {
+        const res = await fetch(`/api/tenant/purchases/rfqs/${id}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        const rfq: Rfq = {
+            id: d.id,
+            suppliers: d.suppliers || [],
+            status: d.status,
+            createdAt: d.createdAt,
+            note: d.note || undefined,
+            lines: (d.lines || []).map((l: any) => ({ id: l.id, item: l.item, quantity: Number(l.quantity), estimatedPrice: Number(l.estimatedPrice), taxRate: Number(l.taxRate) })),
+            number: d.id.substring(0, 8).toUpperCase(),
+        };
+        setDetail(rfq);
+        if (rfq.status === 'sent' || rfq.status === 'closed') {
+            // charger les offres automatiquement
+            await loadOffers(rfq);
+        }
+    };
+    const setStatus = async (r: Rfq, s: Rfq["status"]) => {
+        const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/status`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: s }) });
+        if (!res.ok) { toast.error('Erreur lors du changement de statut'); return; }
         setRfqs((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: s } : x)));
         setDetail((d) => (d && d.id === r.id ? { ...d, status: s } : d));
+        if (s === 'sent') toast.success('RFQ envoyée');
+        else if (s === 'closed') toast.success('RFQ clôturée');
+        else toast.success('Statut mis à jour');
     };
 
     // Offres reçues (fake) : par ligne, une proposition par fournisseur
@@ -133,32 +204,45 @@ export default function PurchasesRfqPage() {
     const [selected, setSelected] = useState<Record<string, Offer>>({}); // key = lineId → offer
     const [convertOpen, setConvertOpen] = useState(false);
     const [convertSupplier, setConvertSupplier] = useState<string>("");
+    // Saisie offres réelles
+    const [newOfferSupplier, setNewOfferSupplier] = useState<Record<string, string>>({});
+    const [newOfferPrice, setNewOfferPrice] = useState<Record<string, number>>({});
+    const [newOfferLead, setNewOfferLead] = useState<Record<string, number>>({});
+    const [newOfferNotes, setNewOfferNotes] = useState<Record<string, string>>({});
 
-    const generateOffers = (r: Rfq) => {
-        // pour chaque ligne et chaque fournisseur, générer un prix autour du prix estimé
-        const off: Offer[] = [];
-        r.lines.forEach((l) => {
-            r.suppliers.forEach((s, idx) => {
-                const variance = (idx + 1) * 0.03; // petite variation par fournisseur
-                const factor = 1 + (Math.random() - 0.5) * 2 * variance; // +/-
-                const price = Math.max(1, Math.round(l.estimatedPrice * factor));
-                const lead = 3 + Math.floor(Math.random() * 10); // 3 à 12 jours
-                off.push({ lineId: l.id, supplier: s, price, lead });
-            });
-        });
+    const loadOffers = async (r: Rfq) => {
+        const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/offers`);
+        if (!res.ok) { toast.error('Erreur lors du chargement des offres'); return; }
+        const list = await res.json();
+        const off: Offer[] = (list || []).map((o: any) => ({ lineId: o.lineId, supplier: o.supplier, price: Number(o.price), lead: Number(o.lead) }));
         setOffers((prev) => ({ ...prev, [r.id]: off }));
-        // Pré-sélectionner la meilleure offre (prix) par ligne
         const byLine: Record<string, Offer[]> = {};
-        off.forEach((o) => {
-            byLine[o.lineId] = byLine[o.lineId] ? [...byLine[o.lineId], o] : [o];
-        });
+        off.forEach((o) => { byLine[o.lineId] = byLine[o.lineId] ? [...byLine[o.lineId], o] : [o]; });
         const chosen: Record<string, Offer> = {};
         Object.keys(byLine).forEach((lineId) => {
             const arr = byLine[lineId];
-            const best = arr.reduce((a, b) => (a.price <= b.price ? a : b));
-            chosen[lineId] = best;
+            if (arr.length) {
+                const best = arr.reduce((a, b) => (a.price <= b.price ? a : b));
+                chosen[lineId] = best;
+            }
         });
         setSelected((prev) => ({ ...prev, ...chosen }));
+    };
+
+    const addOffer = async (r: Rfq, lineId: string) => {
+        const supplier = (newOfferSupplier[lineId] || '').trim();
+        const price = Number(newOfferPrice[lineId] || 0);
+        const lead = Number(newOfferLead[lineId] || 0);
+        const notes = (newOfferNotes[lineId] || '').trim() || null;
+        if (!supplier || price <= 0) { toast.error('Fournisseur et prix requis'); return; }
+        const payload = { offers: [{ lineId, supplier, price, lead, notes }] };
+        const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/offers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) { toast.error('Erreur lors de l\'enregistrement de l\'offre'); return; }
+        await loadOffers(r);
+        setNewOfferPrice((prev) => ({ ...prev, [lineId]: 0 }));
+        setNewOfferLead((prev) => ({ ...prev, [lineId]: 0 }));
+        setNewOfferNotes((prev) => ({ ...prev, [lineId]: '' }));
+        toast.success('Offre ajoutée');
     };
 
     // Envoi RFQ (fake): destinataires, message, pièce jointe simulée
@@ -193,8 +277,45 @@ export default function PurchasesRfqPage() {
                         </DialogHeader>
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <Label>Fournisseurs (séparés par des virgules)</Label>
-                                <Input value={cSuppliers} onChange={(e) => setCSuppliers(e.target.value)} placeholder="Fournisseur A, Fournisseur B" />
+                                <Label>Fournisseurs</Label>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {selectedSuppliers.map((s) => (
+                                        <div key={s} className="flex items-center gap-2 px-2 py-1 rounded border text-sm">
+                                            <span>{s}</span>
+                                            <button className="text-gray-500 hover:text-gray-700" onClick={() => setSelectedSuppliers((prev) => prev.filter((x) => x !== s))}>×</button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="relative">
+                                    <Input value={supplierQuery} onChange={(e) => setSupplierQuery(e.target.value)} placeholder="Rechercher un fournisseur…" />
+                                    {(supplierQuery || supplierLoading || supplierSuggestions.length > 0) && (
+                                        <div className="absolute z-10 mt-1 w-full rounded border bg-white shadow">
+                                            <div className="max-h-56 overflow-auto">
+                                                {supplierLoading && (<div className="px-3 py-2 text-sm text-gray-500">Recherche…</div>)}
+                                                {!supplierLoading && supplierSuggestions.map((s) => (
+                                                    <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm" onClick={() => {
+                                                        setSelectedSuppliers((prev) => prev.includes(s.name) ? prev : [...prev, s.name]);
+                                                        setSupplierQuery(""); setSupplierSuggestions([]);
+                                                    }}>{s.name}</button>
+                                                ))}
+                                                {!supplierLoading && supplierSuggestions.length === 0 && supplierQuery.trim() && (
+                                                    <div className="px-3 py-2 text-sm">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>Aucun résultat pour “{supplierQuery}”.</div>
+                                                            <Button size="sm" onClick={async () => {
+                                                                const name = supplierQuery.trim(); if (!name) return;
+                                                                const res = await fetch('/api/tenant/suppliers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+                                                                if (!res.ok) { alert('Erreur création fournisseur'); return; }
+                                                                setSelectedSuppliers((prev) => prev.includes(name) ? prev : [...prev, name]);
+                                                                setSupplierQuery(""); setSupplierSuggestions([]);
+                                                            }}>Créez ce fournisseur</Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <Label>Note</Label>
@@ -270,9 +391,9 @@ export default function PurchasesRfqPage() {
                                         {r.status === "sent" && <Badge>Envoyée</Badge>}
                                         {r.status === "closed" && <Badge className="bg-green-600 hover:bg-green-600">Clôturée</Badge>}
                                     </td>
-                                    <td className="py-2">{new Date(r.date).toLocaleDateString("fr-FR")}</td>
+                                    <td className="py-2">{new Date(r.createdAt).toLocaleDateString("fr-FR")}</td>
                                     <td className="py-2 text-right">
-                                        <Button variant="outline" size="sm" onClick={() => setDetail(r)}>Voir</Button>
+                                        <Button variant="outline" size="sm" onClick={() => loadDetail(r.id)}>Voir</Button>
                                     </td>
                                 </tr>
                             ))}
@@ -290,9 +411,30 @@ export default function PurchasesRfqPage() {
                     {detail && (
                         <div className="space-y-4">
                             <DialogHeader>
-                                <DialogTitle>{detail.number}</DialogTitle>
+                                <DialogTitle>{detail.number || detail.id}</DialogTitle>
                                 <DialogDescription>Fournisseurs: {detail.suppliers.join(", ")}</DialogDescription>
                             </DialogHeader>
+
+                            {/* Bandeau d'aide contextuel */}
+                            {(() => {
+                                const allSelected = detail.lines.every((l) => !!selected[l.id]);
+                                let title = ""; let desc = "";
+                                if (detail.status === 'draft') {
+                                    title = "Brouillon"; desc = "Envoyez la demande pour commencer à collecter des offres.";
+                                } else if (detail.status === 'sent' && !allSelected) {
+                                    title = "Offres en cours"; desc = "Sélectionnez une offre pour chaque ligne afin d'activer la conversion.";
+                                } else if (detail.status === 'sent' && allSelected) {
+                                    title = "Prêt à convertir"; desc = "Toutes les lignes ont une offre sélectionnée. Cliquez sur “Clôturer et convertir en commande”.";
+                                } else if (detail.status === 'closed') {
+                                    title = "RFQ clôturée"; desc = "Les offres sont figées. Consultez les commandes créées.";
+                                }
+                                return title ? (
+                                    <Alert>
+                                        <AlertTitle>{title}</AlertTitle>
+                                        <AlertDescription>{desc}</AlertDescription>
+                                    </Alert>
+                                ) : null;
+                            })()}
 
                             {/* Stepper simple */}
                             <div className="flex items-center gap-2 text-xs">
@@ -321,92 +463,102 @@ export default function PurchasesRfqPage() {
                                 <div className="text-right mt-2 text-sm text-gray-600">Total estimé: {currency(totalRfq(detail))} FCFA</div>
                             </Card>
 
-                            {/* Offres reçues (comparaison) */}
-                            <Card className="p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="font-medium">Offres reçues (simulation)</div>
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="outline" onClick={() => generateOffers(detail)}>Simuler des réponses</Button>
+                            {/* Offres reçues: visible si 'sent' ou 'closed'; saisie activée seulement si 'sent' */}
+                            {detail.status === 'sent' || detail.status === 'closed' ? (
+                                <Card className="p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="font-medium">Offres reçues</div>
+                                        <div className="flex items-center gap-2" />
                                     </div>
-                                </div>
-                                <div className="space-y-4 text-sm">
-                                    {detail.lines.map((l) => {
-                                        const offs = (offers[detail.id] || []).filter((o) => o.lineId === l.id);
-                                        const best = offs.length ? Math.min(...offs.map((o) => o.price)) : null;
-                                        return (
-                                            <div key={l.id}>
-                                                <div className="mb-1 font-medium">{l.item} (Qté {l.quantity})</div>
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full">
-                                                        <thead className="text-left text-gray-500">
-                                                            <tr>
-                                                                <th className="py-1">Choix</th>
-                                                                <th className="py-1">Fournisseur</th>
-                                                                <th className="py-1">Prix proposé</th>
-                                                                <th className="py-1">Délai (jours)</th>
-                                                                <th className="py-1">Indicateur</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {offs.length === 0 && (
-                                                                <tr><td colSpan={5} className="py-2 text-gray-500">Aucune réponse pour l’instant. Utilisez “Simuler des réponses”.</td></tr>
-                                                            )}
-                                                            {offs.map((o, idx) => (
-                                                                <tr key={idx} className="border-t">
-                                                                    <td className="py-1">
-                                                                        <input
-                                                                            type="radio"
-                                                                            name={`pick_${l.id}`}
-                                                                            checked={selected[l.id]?.supplier === o.supplier && selected[l.id]?.price === o.price}
-                                                                            onChange={() => setSelected((prev) => ({ ...prev, [l.id]: o }))}
-                                                                        />
-                                                                    </td>
-                                                                    <td className="py-1">{o.supplier}</td>
-                                                                    <td className="py-1">{currency(o.price)} FCFA</td>
-                                                                    <td className="py-1">{o.lead}</td>
-                                                                    <td className="py-1">
-                                                                        {best !== null && o.price === best ? (
-                                                                            <Badge className="bg-green-600 hover:bg-green-600">Meilleure offre</Badge>
-                                                                        ) : (
-                                                                            <Badge variant="secondary">Offre</Badge>
-                                                                        )}
-                                                                    </td>
+                                    <div className="space-y-4 text-sm">
+                                        {detail.lines.map((l) => {
+                                            const offs = (offers[detail.id] || []).filter((o) => o.lineId === l.id);
+                                            const best = offs.length ? Math.min(...offs.map((o) => o.price)) : null;
+                                            const disabled = detail.status !== 'sent';
+                                            return (
+                                                <div key={l.id}>
+                                                    <div className="mb-1 font-medium">{l.item} (Qté {l.quantity})</div>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full">
+                                                            <thead className="text-left text-gray-500">
+                                                                <tr>
+                                                                    <th className="py-1">Choix</th>
+                                                                    <th className="py-1">Fournisseur</th>
+                                                                    <th className="py-1">Prix proposé</th>
+                                                                    <th className="py-1">Délai (jours)</th>
+                                                                    <th className="py-1">Indicateur</th>
                                                                 </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                            </thead>
+                                                            <tbody>
+                                                                {offs.length === 0 && (
+                                                                    <tr><td colSpan={5} className="py-2 text-gray-500">Aucune réponse pour l’instant.</td></tr>
+                                                                )}
+                                                                {offs.map((o, idx) => (
+                                                                    <tr key={idx} className="border-t">
+                                                                        <td className="py-1">
+                                                                            <input
+                                                                                type="radio"
+                                                                                name={`pick_${l.id}`}
+                                                                                checked={selected[l.id]?.supplier === o.supplier && selected[l.id]?.price === o.price}
+                                                                                onChange={() => setSelected((prev) => ({ ...prev, [l.id]: o }))}
+                                                                            />
+                                                                        </td>
+                                                                        <td className="py-1">{o.supplier}</td>
+                                                                        <td className="py-1">{currency(o.price)} FCFA</td>
+                                                                        <td className="py-1">{o.lead}</td>
+                                                                        <td className="py-1">
+                                                                            {best !== null && o.price === best ? (
+                                                                                <Badge className="bg-green-600 hover:bg-green-600">Meilleure offre</Badge>
+                                                                            ) : (
+                                                                                <Badge variant="secondary">Offre</Badge>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                                                            <div className="w-56">
+                                                                <Select value={newOfferSupplier[l.id] || ''} onValueChange={(v) => setNewOfferSupplier((prev) => ({ ...prev, [l.id]: v }))}>
+                                                                    <SelectTrigger><SelectValue placeholder="Fournisseur" /></SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {detail.suppliers.map((s) => (
+                                                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <Input className="w-32" type="number" placeholder="Prix" value={newOfferPrice[l.id] ?? ''} onChange={(e) => setNewOfferPrice((prev) => ({ ...prev, [l.id]: Number(e.target.value || 0) }))} disabled={disabled} />
+                                                            <Input className="w-28" type="number" placeholder="Délai" value={newOfferLead[l.id] ?? ''} onChange={(e) => setNewOfferLead((prev) => ({ ...prev, [l.id]: Number(e.target.value || 0) }))} disabled={disabled} />
+                                                            <Input className="flex-1 min-w-40" placeholder="Notes (optionnel)" value={newOfferNotes[l.id] ?? ''} onChange={(e) => setNewOfferNotes((prev) => ({ ...prev, [l.id]: e.target.value }))} disabled={disabled} />
+                                                            <Button size="sm" onClick={() => addOffer(detail, l.id)} disabled={disabled}>Ajouter l'offre</Button>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </Card>
+                                            );
+                                        })}
+                                    </div>
+                                    {detail.status === 'closed' && (
+                                        <div className="mt-3 text-xs text-gray-500">La RFQ est clôturée, la saisie d’offres est désactivée.</div>
+                                    )}
+                                </Card>
+                            ) : (
+                                <Card className="p-3 text-sm text-gray-600">Envoyez la RFQ pour commencer à enregistrer des offres.</Card>
+                            )}
 
-                            {/* Conversion en commande */}
-                            <Card className="p-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="font-medium">Conversion en commande d’achat</div>
+                            {/* Conversion en commande: visible uniquement si 'sent' ET toutes les lignes ont une offre sélectionnée */}
+                            {/* CTA principal: Clôturer et convertir */}
+                            {detail.status === 'sent' && (
+                                <div className="flex justify-end">
                                     <Button
-                                        onClick={() => {
-                                            // Si toutes les lignes ont un choix, proposer un fournisseur retenu (majoritaire ou premier)
-                                            if (detail) {
-                                                const pickedSuppliers = detail.lines.map((l) => selected[l.id]?.supplier).filter(Boolean) as string[];
-                                                const freq: Record<string, number> = {};
-                                                pickedSuppliers.forEach((s) => { freq[s] = (freq[s] || 0) + 1; });
-                                                const leader = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || detail.suppliers[0];
-                                                setConvertSupplier(leader);
-                                            }
-                                            setConvertOpen(true);
-                                        }}
+                                        className="mt-2"
                                         disabled={detail.lines.some((l) => !selected[l.id])}
+                                        onClick={() => setConvertOpen(true)}
                                     >
-                                        Préparer la commande
+                                        Clôturer et convertir en commande
                                     </Button>
                                 </div>
-                                <div className="text-xs text-gray-600 mt-2">
-                                    Sélectionnez une offre par ligne puis cliquez sur “Préparer la commande”.
-                                </div>
-                            </Card>
+                            )}
 
                             {/* Actions statut */}
                             <div className="flex justify-end gap-2">
@@ -417,10 +569,7 @@ export default function PurchasesRfqPage() {
                                     </>
                                 )}
                                 {detail.status === "sent" && (
-                                    <>
-                                        <Button variant="outline" onClick={() => alert("Simulation: Comparaison des offres")}>Comparer les offres</Button>
-                                        <Button onClick={() => setConvertOpen(true)}>Clôturer et convertir en commande</Button>
-                                    </>
+                                    <></>
                                 )}
                                 {detail.status === "closed" && (
                                     <Button onClick={() => alert("Simulation: Commande créée")}>Voir la commande créée</Button>
@@ -488,7 +637,7 @@ export default function PurchasesRfqPage() {
 
                                             // En-tête
                                             draw("DEMANDE DE PRIX", { x: margin, y: height - 70, size: 22, font: bold, color: rgb(0.1, 0.1, 0.1) });
-                                            draw(detail.number, { x: margin, y: height - 95, size: 12, font, color: rgb(0.4, 0.4, 0.4) });
+                                            draw(detail.number || detail.id, { x: margin, y: height - 95, size: 12, font, color: rgb(0.4, 0.4, 0.4) });
 
                                             // Fournisseurs
                                             draw("Fournisseurs:", { x: margin, y: height - 125, size: 10, font: bold });
@@ -533,7 +682,14 @@ export default function PurchasesRfqPage() {
 
                             <div className="flex justify-end gap-2">
                                 <Button variant="outline" onClick={() => setSendOpen(false)}>Annuler</Button>
-                                <Button onClick={() => { alert('Simulation: e‑mail envoyé'); setSendOpen(false); setStatus(detail, 'sent'); }}>Envoyer</Button>
+                                <Button onClick={async () => {
+                                    if (!detail) return;
+                                    const idem = Math.random().toString(36).slice(2);
+                                    const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/send`, { method: 'POST', headers: { 'x-idempotency-key': idem } });
+                                    if (!res.ok) { toast.error('Erreur lors de l\'envoi'); return; }
+                                    setSendOpen(false);
+                                    await setStatus(detail, 'sent');
+                                }}>Envoyer</Button>
                             </div>
                         </div>
                     )}
@@ -549,19 +705,7 @@ export default function PurchasesRfqPage() {
                     </DialogHeader>
                     {detail && (
                         <div className="space-y-4 text-sm">
-                            <div className="grid grid-cols-12 gap-2 items-center">
-                                <div className="col-span-3 text-gray-600">Fournisseur retenu</div>
-                                <div className="col-span-9">
-                                    <Select value={convertSupplier} onValueChange={setConvertSupplier}>
-                                        <SelectTrigger><SelectValue placeholder="Choisir un fournisseur" /></SelectTrigger>
-                                        <SelectContent>
-                                            {detail.suppliers.map((s) => (
-                                                <SelectItem key={s} value={s}>{s}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
+                            <div className="text-sm text-gray-600">Vous pouvez retenir des fournisseurs différents par ligne. Aucune sélection globale requise.</div>
 
                             <Card className="p-3">
                                 <div className="font-medium mb-2">Lignes de la commande</div>
@@ -604,10 +748,18 @@ export default function PurchasesRfqPage() {
 
                             <div className="flex justify-end gap-2">
                                 <Button variant="outline" onClick={() => setConvertOpen(false)}>Annuler</Button>
-                                <Button onClick={() => {
+                                <Button onClick={async () => {
+                                    if (!detail) return;
+                                    const payload = {
+                                        selected: Object.fromEntries(detail.lines.map((l) => [l.id, { price: selected[l.id]?.price ?? l.estimatedPrice, lead: selected[l.id]?.lead ?? 0, supplier: selected[l.id]?.supplier || convertSupplier || detail.suppliers[0] }]))
+                                    };
+                                    const idem = Math.random().toString(36).slice(2);
+                                    const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/convert`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-idempotency-key': idem }, body: JSON.stringify(payload) });
+                                    if (!res.ok) { toast.error('Erreur lors de la conversion'); return; }
+                                    const data = await res.json();
                                     setConvertOpen(false);
-                                    setStatus(detail, "closed");
-                                    alert("Simulation: commande d’achat créée avec succès");
+                                    await setStatus(detail, 'closed');
+                                    toast.success(Array.isArray(data.poIds) ? `Commandes créées: ${data.poIds.join(', ')}` : 'Commandes créées');
                                 }}>Confirmer et créer la commande</Button>
                             </div>
                         </div>
