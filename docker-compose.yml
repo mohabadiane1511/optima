@@ -41,6 +41,12 @@ services:
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_SECURE=${SMTP_SECURE}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
     ports:
       - "3000:3000"
     volumes:
@@ -64,6 +70,12 @@ services:
       - NODE_ENV=development
       - AUDIT_RETENTION_DAYS=30
       - AUDIT_WARN_DAYS=2
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_SECURE=${SMTP_SECURE}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
     volumes:
       - .:/app
       - /app/node_modules
