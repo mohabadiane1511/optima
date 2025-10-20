@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -42,6 +43,7 @@ type Rfq = {
     note?: string;
     lines: RfqLine[];
     number?: string; // legacy UI
+    purchaseOrderIds?: string[];
 };
 
 const currency = (n: number) =>
@@ -181,6 +183,7 @@ export default function PurchasesRfqPage() {
             note: d.note || undefined,
             lines: (d.lines || []).map((l: any) => ({ id: l.id, item: l.item, quantity: Number(l.quantity), estimatedPrice: Number(l.estimatedPrice), taxRate: Number(l.taxRate) })),
             number: d.id.substring(0, 8).toUpperCase(),
+            purchaseOrderIds: Array.isArray(d.purchaseOrders) ? d.purchaseOrders.map((p: any) => p.id) : [],
         };
         setDetail(rfq);
         if (rfq.status === 'sent' || rfq.status === 'closed') {
@@ -571,8 +574,10 @@ export default function PurchasesRfqPage() {
                                 {detail.status === "sent" && (
                                     <></>
                                 )}
-                                {detail.status === "closed" && (
-                                    <Button onClick={() => alert("Simulation: Commande créée")}>Voir la commande créée</Button>
+                                {detail.status === "closed" && detail.purchaseOrderIds && detail.purchaseOrderIds.length > 0 && (
+                                    <Button asChild>
+                                        <Link href={`/purchases/orders/${detail.purchaseOrderIds[0]}`}>Voir la commande créée</Link>
+                                    </Button>
                                 )}
                             </div>
                         </div>

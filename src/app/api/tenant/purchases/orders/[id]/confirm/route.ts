@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
+import { logAuditEvent } from '@/lib/audit';
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
@@ -15,18 +16,21 @@ async function resolveTenantId(request: NextRequest): Promise<string | null> {
   return t?.id || null;
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const tenantId = await resolveTenantId(request);
     if (!tenantId) return NextResponse.json({ error: 'Tenant introuvable' }, { status: 400 });
     const db = prisma as any;
-    const po = await db.purchaseOrder.findFirst({ where: { id: params.id, tenantId }, include: { lines: true, rfq: true } });
+
+    const po = await db.purchaseOrder.findFirst({ where: { id: params.id, tenantId }, select: { id: true, status: true } });
     if (!po) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
-    // Inclure infos tenant (nom, logo)
-    const tenant = await db.tenant.findUnique({ where: { id: tenantId }, select: { name: true, logoUrl: true } });
-    return NextResponse.json({ ...po, tenant });
+    if (po.status !== 'created') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+
+    const updated = await db.purchaseOrder.update({ where: { id: po.id }, data: { status: 'confirmed' }, select: { id: true, status: true } });
+    await logAuditEvent({ tenantId, action: 'po.confirmed', entity: 'po', entityId: updated.id }, request);
+    return NextResponse.json(updated);
   } catch (e) {
-    console.error('GET /api/tenant/purchases/orders/[id] error', e);
+    console.error('POST /api/tenant/purchases/orders/[id]/confirm', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
