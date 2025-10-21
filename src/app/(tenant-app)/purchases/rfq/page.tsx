@@ -26,6 +26,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
 
 type RfqLine = {
     id: string;
@@ -53,6 +54,11 @@ export default function PurchasesRfqPage() {
     const [rfqs, setRfqs] = useState<Rfq[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [loadingCreate, setLoadingCreate] = useState(false);
+    const [loadingRfqSend, setLoadingRfqSend] = useState(false);
+    const [loadingSetStatus, setLoadingSetStatus] = useState(false);
+    const [loadingAddOffer, setLoadingAddOffer] = useState<Record<string, boolean>>({});
+    const [loadingConvert, setLoadingConvert] = useState(false);
 
     const [statusFilter, setStatusFilter] = useState<"all" | Rfq["status"]>("all");
     const [search, setSearch] = useState("");
@@ -141,32 +147,35 @@ export default function PurchasesRfqPage() {
     const totalCreate = cLines.reduce((s, l) => s + totalLine(l), 0);
 
     const createRfq = async () => {
+        setLoadingCreate(true);
         const suppliers = selectedSuppliers.length ? selectedSuppliers : [];
         const payload = {
             suppliers,
             note: cNote || undefined,
             lines: cLines.map((l) => ({ item: l.item, quantity: l.quantity, estimatedPrice: l.estimatedPrice, taxRate: l.taxRate }))
         };
-        const res = await fetch('/api/tenant/purchases/rfqs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!res.ok) { toast.error('Erreur lors de la création de la RFQ'); return; }
-        // recharger la liste
-        setCreateOpen(false);
-        setSelectedSuppliers([]); setSupplierQuery(""); setSupplierSuggestions([]); setCNote(""); setCLines([{ id: 'c1', item: 'Article', quantity: 1, estimatedPrice: 0, taxRate: 18 }]);
-        const refresh = await fetch('/api/tenant/purchases/rfqs');
-        if (refresh.ok) {
-            const data = await refresh.json();
-            const items = (data?.items || []).map((it: any) => ({
-                id: it.id,
-                suppliers: it.suppliers || [],
-                status: it.status,
-                createdAt: it.createdAt,
-                note: it.note || undefined,
-                lines: [],
-                number: it.id.substring(0, 8).toUpperCase(),
-            })) as Rfq[];
-            setRfqs(items);
-        }
-        toast.success('Brouillon RFQ créé');
+        try {
+            const res = await fetch('/api/tenant/purchases/rfqs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!res.ok) { toast.error('Erreur lors de la création de la RFQ'); return; }
+            // recharger la liste
+            setCreateOpen(false);
+            setSelectedSuppliers([]); setSupplierQuery(""); setSupplierSuggestions([]); setCNote(""); setCLines([{ id: 'c1', item: 'Article', quantity: 1, estimatedPrice: 0, taxRate: 18 }]);
+            const refresh = await fetch('/api/tenant/purchases/rfqs');
+            if (refresh.ok) {
+                const data = await refresh.json();
+                const items = (data?.items || []).map((it: any) => ({
+                    id: it.id,
+                    suppliers: it.suppliers || [],
+                    status: it.status,
+                    createdAt: it.createdAt,
+                    note: it.note || undefined,
+                    lines: [],
+                    number: it.id.substring(0, 8).toUpperCase(),
+                })) as Rfq[];
+                setRfqs(items);
+            }
+            toast.success('Brouillon RFQ créé');
+        } finally { setLoadingCreate(false); }
     };
 
     // Détail RFQ (fake)
@@ -192,13 +201,16 @@ export default function PurchasesRfqPage() {
         }
     };
     const setStatus = async (r: Rfq, s: Rfq["status"]) => {
-        const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/status`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: s }) });
-        if (!res.ok) { toast.error('Erreur lors du changement de statut'); return; }
-        setRfqs((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: s } : x)));
-        setDetail((d) => (d && d.id === r.id ? { ...d, status: s } : d));
-        if (s === 'sent') toast.success('RFQ envoyée');
-        else if (s === 'closed') toast.success('RFQ clôturée');
-        else toast.success('Statut mis à jour');
+        try {
+            setLoadingSetStatus(true);
+            const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/status`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: s }) });
+            if (!res.ok) { toast.error('Erreur lors du changement de statut'); return; }
+            setRfqs((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: s } : x)));
+            setDetail((d) => (d && d.id === r.id ? { ...d, status: s } : d));
+            if (s === 'sent') toast.success('RFQ envoyée');
+            else if (s === 'closed') toast.success('RFQ clôturée');
+            else toast.success('Statut mis à jour');
+        } finally { setLoadingSetStatus(false); }
     };
 
     // Offres reçues (fake) : par ligne, une proposition par fournisseur
@@ -239,13 +251,18 @@ export default function PurchasesRfqPage() {
         const notes = (newOfferNotes[lineId] || '').trim() || null;
         if (!supplier || price <= 0) { toast.error('Fournisseur et prix requis'); return; }
         const payload = { offers: [{ lineId, supplier, price, lead, notes }] };
-        const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/offers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!res.ok) { toast.error('Erreur lors de l\'enregistrement de l\'offre'); return; }
-        await loadOffers(r);
-        setNewOfferPrice((prev) => ({ ...prev, [lineId]: 0 }));
-        setNewOfferLead((prev) => ({ ...prev, [lineId]: 0 }));
-        setNewOfferNotes((prev) => ({ ...prev, [lineId]: '' }));
-        toast.success('Offre ajoutée');
+        try {
+            setLoadingAddOffer((prev) => ({ ...prev, [lineId]: true }));
+            const res = await fetch(`/api/tenant/purchases/rfqs/${r.id}/offers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!res.ok) { toast.error('Erreur lors de l\'enregistrement de l\'offre'); return; }
+            await loadOffers(r);
+            setNewOfferPrice((prev) => ({ ...prev, [lineId]: 0 }));
+            setNewOfferLead((prev) => ({ ...prev, [lineId]: 0 }));
+            setNewOfferNotes((prev) => ({ ...prev, [lineId]: '' }));
+            toast.success('Offre ajoutée');
+        } finally {
+            setLoadingAddOffer((prev) => ({ ...prev, [lineId]: false }));
+        }
     };
 
     // Envoi RFQ (fake): destinataires, message, pièce jointe simulée
@@ -345,8 +362,8 @@ export default function PurchasesRfqPage() {
                                 </div>
                             </div>
                             <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setCreateOpen(false)}>Annuler</Button>
-                                <Button onClick={createRfq}>Enregistrer le brouillon</Button>
+                                <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={loadingCreate}>Annuler</Button>
+                                <Button onClick={createRfq} disabled={loadingCreate}>{loadingCreate ? (<><Spinner className="mr-2" />Enregistrement…</>) : 'Enregistrer le brouillon'}</Button>
                             </div>
                         </div>
                     </DialogContent>
@@ -534,7 +551,7 @@ export default function PurchasesRfqPage() {
                                                             <Input className="w-32" type="number" placeholder="Prix" value={newOfferPrice[l.id] ?? ''} onChange={(e) => setNewOfferPrice((prev) => ({ ...prev, [l.id]: Number(e.target.value || 0) }))} disabled={disabled} />
                                                             <Input className="w-28" type="number" placeholder="Délai" value={newOfferLead[l.id] ?? ''} onChange={(e) => setNewOfferLead((prev) => ({ ...prev, [l.id]: Number(e.target.value || 0) }))} disabled={disabled} />
                                                             <Input className="flex-1 min-w-40" placeholder="Notes (optionnel)" value={newOfferNotes[l.id] ?? ''} onChange={(e) => setNewOfferNotes((prev) => ({ ...prev, [l.id]: e.target.value }))} disabled={disabled} />
-                                                            <Button size="sm" onClick={() => addOffer(detail, l.id)} disabled={disabled}>Ajouter l'offre</Button>
+                                                            <Button size="sm" onClick={() => addOffer(detail, l.id)} disabled={disabled || !!loadingAddOffer[l.id]}>{loadingAddOffer[l.id] ? (<><Spinner className="mr-2" />Ajout…</>) : "Ajouter l'offre"}</Button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -567,8 +584,8 @@ export default function PurchasesRfqPage() {
                             <div className="flex justify-end gap-2">
                                 {detail.status === "draft" && (
                                     <>
-                                        <Button variant="outline" onClick={() => openSend(detail)}>Envoyer</Button>
-                                        <Button onClick={() => setStatus(detail, "sent")}>Marquer comme envoyée</Button>
+                                        <Button variant="outline" onClick={() => openSend(detail)} disabled={loadingRfqSend}>Envoyer</Button>
+                                        <Button onClick={() => setStatus(detail, "sent")} disabled={loadingSetStatus}>{loadingSetStatus ? (<><Spinner className="mr-2" />Mise à jour…</>) : 'Marquer comme envoyée'}</Button>
                                     </>
                                 )}
                                 {detail.status === "sent" && (
@@ -686,15 +703,18 @@ export default function PurchasesRfqPage() {
                             </div>
 
                             <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setSendOpen(false)}>Annuler</Button>
+                                <Button variant="outline" onClick={() => setSendOpen(false)} disabled={loadingRfqSend}>Annuler</Button>
                                 <Button onClick={async () => {
                                     if (!detail) return;
-                                    const idem = Math.random().toString(36).slice(2);
-                                    const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/send`, { method: 'POST', headers: { 'x-idempotency-key': idem } });
-                                    if (!res.ok) { toast.error('Erreur lors de l\'envoi'); return; }
-                                    setSendOpen(false);
-                                    await setStatus(detail, 'sent');
-                                }}>Envoyer</Button>
+                                    try {
+                                        setLoadingRfqSend(true);
+                                        const idem = Math.random().toString(36).slice(2);
+                                        const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/send`, { method: 'POST', headers: { 'x-idempotency-key': idem } });
+                                        if (!res.ok) { toast.error('Erreur lors de l\'envoi'); return; }
+                                        setSendOpen(false);
+                                        await setStatus(detail, 'sent');
+                                    } finally { setLoadingRfqSend(false); }
+                                }} disabled={loadingRfqSend}>{loadingRfqSend ? (<><Spinner className="mr-2" />Envoi…</>) : 'Envoyer'}</Button>
                             </div>
                         </div>
                     )}
@@ -752,20 +772,23 @@ export default function PurchasesRfqPage() {
                             </Card>
 
                             <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setConvertOpen(false)}>Annuler</Button>
+                                <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={loadingConvert}>Annuler</Button>
                                 <Button onClick={async () => {
                                     if (!detail) return;
                                     const payload = {
                                         selected: Object.fromEntries(detail.lines.map((l) => [l.id, { price: selected[l.id]?.price ?? l.estimatedPrice, lead: selected[l.id]?.lead ?? 0, supplier: selected[l.id]?.supplier || convertSupplier || detail.suppliers[0] }]))
                                     };
                                     const idem = Math.random().toString(36).slice(2);
-                                    const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/convert`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-idempotency-key': idem }, body: JSON.stringify(payload) });
-                                    if (!res.ok) { toast.error('Erreur lors de la conversion'); return; }
-                                    const data = await res.json();
-                                    setConvertOpen(false);
-                                    await setStatus(detail, 'closed');
-                                    toast.success(Array.isArray(data.poIds) ? `Commandes créées: ${data.poIds.join(', ')}` : 'Commandes créées');
-                                }}>Confirmer et créer la commande</Button>
+                                    try {
+                                        setLoadingConvert(true);
+                                        const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/convert`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-idempotency-key': idem }, body: JSON.stringify(payload) });
+                                        if (!res.ok) { toast.error('Erreur lors de la conversion'); return; }
+                                        const data = await res.json();
+                                        setConvertOpen(false);
+                                        await setStatus(detail, 'closed');
+                                        toast.success(Array.isArray(data.poIds) ? `Commandes créées: ${data.poIds.join(', ')}` : 'Commandes créées');
+                                    } finally { setLoadingConvert(false); }
+                                }} disabled={loadingConvert}>{loadingConvert ? (<><Spinner className="mr-2" />Conversion…</>) : 'Confirmer et créer la commande'}</Button>
                             </div>
                         </div>
                     )}

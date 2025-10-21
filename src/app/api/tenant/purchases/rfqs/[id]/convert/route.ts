@@ -98,9 +98,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     });
 
     for (const id of pos) {
-      await logAuditEvent({ tenantId, action: 'po.created', entity: 'po', entityId: id, metadata: { rfqId: rfqClosed.id } }, request);
+      await logAuditEvent({ tenantId, action: 'Commande d\'achat créée depuis RFQ', entity: 'po', entityId: id, metadata: { rfqId: rfqClosed.id } }, request);
     }
-    await logAuditEvent({ tenantId, action: 'rfq.converted', entity: 'rfq', entityId: rfqClosed.id, after: rfqClosed, metadata: { pos } }, request);
+    await logAuditEvent({ tenantId, action: 'Demande de prix clôturée et convertie en commande', entity: 'rfq', entityId: rfqClosed.id, after: rfqClosed, metadata: { poIds: pos } }, request);
 
     const response = { poIds: pos, rfqStatus: rfqClosed.status };
     if (idemKey) {

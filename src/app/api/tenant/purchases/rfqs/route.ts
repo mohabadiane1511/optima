@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
       select: { id: true }
     });
 
-    await logAuditEvent({ tenantId, action: 'rfq.created', entity: 'rfq', entityId: created.id, metadata: { suppliersCount: suppliers.length, lines: normalizedLines.length } }, request);
+    await logAuditEvent({ tenantId, action: 'Demande de prix créée', entity: 'rfq', entityId: created.id, metadata: { suppliersCount: suppliers.length, lines: normalizedLines.length } }, request);
 
     return NextResponse.json({ id: created.id }, { status: 201 });
   } catch (e) {

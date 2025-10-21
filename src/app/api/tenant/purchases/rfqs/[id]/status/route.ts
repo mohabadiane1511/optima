@@ -29,7 +29,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!before) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
 
     const updated = await db.rfq.update({ where: { id: params.id }, data: { status }, select: { id: true, status: true } });
-    await logAuditEvent({ tenantId, action: 'rfq.status_changed', entity: 'rfq', entityId: params.id, before, after: updated }, request);
+    await logAuditEvent({ tenantId, action: `Statut de la demande mis à jour: ${before.status} → ${updated.status}` , entity: 'rfq', entityId: params.id, before, after: updated }, request);
     return NextResponse.json(updated);
   } catch (e) {
     console.error('PATCH /api/tenant/purchases/rfqs/[id]/status error', e);
