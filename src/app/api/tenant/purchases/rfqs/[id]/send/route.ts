@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (rfq.status !== 'draft') return NextResponse.json({ error: 'Déjà envoyée ou clôturée' }, { status: 400 });
 
     const updated = await db.rfq.update({ where: { id: rfq.id }, data: { status: 'sent' }, select: { id: true, status: true } });
-    await logAuditEvent({ tenantId, action: 'rfq.sent', entity: 'rfq', entityId: rfq.id }, request);
+    await logAuditEvent({ tenantId, action: 'Demande de prix envoyée', entity: 'rfq', entityId: rfq.id }, request);
 
     const response = { id: rfq.id, status: updated.status };
     if (idemKey) {

@@ -112,7 +112,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       lineCount: (po.lines || []).length,
     };
 
-    await logAuditEvent({ tenantId, action: 'po.sent', entity: 'po', entityId: po.id, metadata: { summary } }, request);
+    await logAuditEvent({ tenantId, action: 'Commande d\'achat envoyée au fournisseur', entity: 'po', entityId: po.id, metadata: { summary } }, request);
 
     // Envoyer l'email si SMTP config
     const recipient = (typeof to === 'string' && to.includes('@')) ? to : (po.supplier?.includes('@') ? po.supplier : (process.env.SMTP_USER || ''));

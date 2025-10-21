@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { Spinner } from "@/components/ui/spinner";
 
 type Po = {
     id: string;
@@ -22,6 +23,7 @@ type Po = {
     createdAt: string;
     lines: { id: string; name: string; qty: number; unit: string; unitPrice: number; taxRate: number; totalTTC: number }[];
     tenant?: { name?: string | null; logoUrl?: string | null };
+    receipt?: { id?: string; status?: string; receivedByLine?: Record<string, number> } | null;
 };
 
 const money = (n: number) => new Intl.NumberFormat("fr-FR").format(Math.round(Number(n || 0)));
@@ -35,6 +37,12 @@ export default function PurchaseOrderDetailPage() {
     const [sendTo, setSendTo] = useState("");
     const [sendSubject, setSendSubject] = useState("");
     const [sendMessage, setSendMessage] = useState("");
+    const [receiveOpen, setReceiveOpen] = useState(false);
+    const [receiveNote, setReceiveNote] = useState("");
+    const [receiveQty, setReceiveQty] = useState<Record<string, number>>({});
+    const [loadingConfirm, setLoadingConfirm] = useState(false);
+    const [loadingSend, setLoadingSend] = useState(false);
+    const [loadingReceive, setLoadingReceive] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -66,12 +74,54 @@ export default function PurchaseOrderDetailPage() {
 
     const onConfirm = async () => {
         try {
+            setLoadingConfirm(true);
             const res = await fetch(`/api/tenant/purchases/orders/${id}/confirm`, { method: 'POST' });
             if (!res.ok) throw new Error();
-            setPo((prev) => prev ? { ...prev, status: 'confirmed' } as Po : prev);
+            // recharger les données (inclut auto-réception not_received)
+            const refreshed = await fetch(`/api/tenant/purchases/orders/${id}`);
+            if (refreshed.ok) setPo(await refreshed.json()); else setPo((prev) => prev ? { ...prev, status: 'confirmed' } as Po : prev);
             toast.success('Commande confirmée');
         } catch {
             toast.error('Erreur lors de la confirmation');
+        } finally {
+            setLoadingConfirm(false);
+        }
+    };
+
+    const openReceive = () => {
+        if (!po) return;
+        // Préremplir avec la quantité restante par ligne
+        const map: Record<string, number> = {};
+        const receivedMap = po.receipt?.receivedByLine || {};
+        for (const l of po.lines) {
+            const ordered = Number(l.qty || 0);
+            const received = Number(receivedMap[l.id] || 0);
+            const remaining = Math.max(0, ordered - received);
+            map[l.id] = remaining;
+        }
+        setReceiveQty(map);
+        setReceiveNote("");
+        setReceiveOpen(true);
+    };
+
+    const submitReceive = async () => {
+        try {
+            const lines = Object.entries(receiveQty)
+                .map(([poLineId, qty]) => ({ poLineId, qty: Number(qty || 0) }))
+                .filter((l) => Number.isFinite(l.qty) && l.qty > 0);
+            if (lines.length === 0) { toast.error('Veuillez saisir au moins une quantité'); return; }
+            const idem = Math.random().toString(36).slice(2);
+            const res = await fetch(`/api/tenant/purchases/orders/${id}/receive`, {
+                method: 'POST', headers: { 'content-type': 'application/json', 'x-idempotency-key': idem }, body: JSON.stringify({ lines, note: receiveNote || undefined })
+            });
+            if (!res.ok) throw new Error();
+            setReceiveOpen(false);
+            // Recharger la commande (pour statut et cumuls)
+            const refreshed = await fetch(`/api/tenant/purchases/orders/${id}`);
+            if (refreshed.ok) setPo(await refreshed.json());
+            toast.success('Réception enregistrée');
+        } catch {
+            toast.error('Erreur lors de la réception');
         }
     };
 
@@ -94,7 +144,15 @@ export default function PurchaseOrderDetailPage() {
             {po.status === 'created' && (
                 <div className="flex gap-2 justify-end">
                     <Button variant="outline" onClick={openSend} disabled={sendOpen}>Envoyer au fournisseur</Button>
-                    <Button onClick={onConfirm}>Confirmer la commande</Button>
+                    <Button onClick={onConfirm} disabled={loadingConfirm}>{loadingConfirm ? (<><Spinner className="mr-2" />Confirmation…</>) : 'Confirmer la commande'}</Button>
+                </div>
+            )}
+            {po.status === 'confirmed' && (
+                <div className="flex gap-2 justify-end">
+                    {po.receipt?.id && (
+                        <Button variant="outline" onClick={() => window.open(`/purchases/receipts/${po.receipt?.id}`, '_blank')}>Voir la réception</Button>
+                    )}
+                    <Button onClick={openReceive}>Réceptionner</Button>
                 </div>
             )}
 
@@ -210,9 +268,10 @@ export default function PurchaseOrderDetailPage() {
                         </Card>
 
                         <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setSendOpen(false)}>Annuler</Button>
-                            <Button onClick={async () => {
+                            <Button variant="outline" onClick={() => setSendOpen(false)} disabled={loadingSend}>Annuler</Button>
+                            <Button disabled={loadingSend} onClick={async () => {
                                 try {
+                                    setLoadingSend(true);
                                     const idem = Math.random().toString(36).slice(2);
                                     const res = await fetch(`/api/tenant/purchases/orders/${po.id}/send`, { method: 'POST', headers: { 'x-idempotency-key': idem, 'content-type': 'application/json' }, body: JSON.stringify({ to: sendTo, subject: sendSubject, message: sendMessage }) });
                                     if (!res.ok) throw new Error();
@@ -220,8 +279,10 @@ export default function PurchaseOrderDetailPage() {
                                     toast.success('Commande envoyée au fournisseur');
                                 } catch {
                                     toast.error("Erreur lors de l'envoi de la commande");
+                                } finally {
+                                    setLoadingSend(false);
                                 }
-                            }}>Envoyer</Button>
+                            }}>{loadingSend ? (<><Spinner className="mr-2" />Envoi…</>) : 'Envoyer'}</Button>
                         </div>
                     </div>
                 </DialogContent>
@@ -235,6 +296,8 @@ export default function PurchaseOrderDetailPage() {
                             <tr>
                                 <th className="py-1">Désignation</th>
                                 <th className="py-1">Qté</th>
+                                {po.receipt && <th className="py-1">Reçu</th>}
+                                {po.receipt && <th className="py-1">Restant</th>}
                                 <th className="py-1">PU</th>
                                 <th className="py-1">TVA %</th>
                                 <th className="py-1">Total TTC</th>
@@ -245,6 +308,12 @@ export default function PurchaseOrderDetailPage() {
                                 <tr key={l.id} className="border-t">
                                     <td className="py-1">{l.name}</td>
                                     <td className="py-1">{Number(l.qty)}</td>
+                                    {po.receipt && (
+                                        <>
+                                            <td className="py-1">{Number(po.receipt.receivedByLine?.[l.id] || 0)}</td>
+                                            <td className="py-1">{Math.max(0, Number(l.qty || 0) - Number(po.receipt.receivedByLine?.[l.id] || 0))}</td>
+                                        </>
+                                    )}
                                     <td className="py-1">{money(l.unitPrice)} FCFA</td>
                                     <td className="py-1">{Number(l.taxRate)}</td>
                                     <td className="py-1">{money(l.totalTTC)} FCFA</td>
@@ -259,6 +328,57 @@ export default function PurchaseOrderDetailPage() {
                     <div className="font-medium">Total TTC: {money(po.totalTTC)} FCFA</div>
                 </div>
             </Card>
+
+            {/* Réception – Modale */}
+            <Dialog open={receiveOpen} onOpenChange={setReceiveOpen}>
+                <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Enregistrer une réception</DialogTitle>
+                        <DialogDescription>Saisissez les quantités reçues par ligne. La sur‑réception est refusée.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 text-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="text-left text-gray-500">
+                                    <tr>
+                                        <th className="py-1">Désignation</th>
+                                        <th className="py-1">Commandé</th>
+                                        <th className="py-1">Déjà reçu</th>
+                                        <th className="py-1">Restant</th>
+                                        <th className="py-1">Qté à recevoir</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {po.lines.map((l) => {
+                                        const ordered = Number(l.qty || 0);
+                                        const received = Number(po.receipt?.receivedByLine?.[l.id] || 0);
+                                        const remaining = Math.max(0, ordered - received);
+                                        return (
+                                            <tr key={l.id} className="border-t">
+                                                <td className="py-1">{l.name}</td>
+                                                <td className="py-1">{ordered}</td>
+                                                <td className="py-1">{received}</td>
+                                                <td className="py-1">{remaining}</td>
+                                                <td className="py-1">
+                                                    <Input type="number" min={0} max={remaining} value={receiveQty[l.id] ?? 0} onChange={(e) => setReceiveQty((prev) => ({ ...prev, [l.id]: Number(e.target.value || 0) }))} />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <Label>Note (optionnel)</Label>
+                            <Textarea value={receiveNote} onChange={(e) => setReceiveNote(e.target.value)} />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setReceiveOpen(false)} disabled={loadingReceive}>Annuler</Button>
+                            <Button onClick={async () => { setLoadingReceive(true); await submitReceive(); setLoadingReceive(false); }} disabled={loadingReceive}>{loadingReceive ? (<><Spinner className="mr-2" />Enregistrement…</>) : 'Enregistrer'}</Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

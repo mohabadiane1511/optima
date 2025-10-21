@@ -1,27 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
-type OrderListItem = {
+type ReceiptItem = {
     id: string;
-    supplier: string;
+    purchaseOrderId: string;
+    supplier: string | null;
     status: string;
-    total: number;
     createdAt: string;
+    entryCount: number;
 };
 
-const money = (n: number) => new Intl.NumberFormat("fr-FR").format(Math.round(n));
-
-export default function PurchaseOrdersPage() {
-    const [items, setItems] = useState<OrderListItem[]>([]);
+export default function ReceiptsPage() {
+    const [items, setItems] = useState<ReceiptItem[]>([]);
     const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState<string>("all");
     const [q, setQ] = useState("");
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
@@ -33,53 +30,32 @@ export default function PurchaseOrdersPage() {
         const run = async () => {
             try {
                 setLoading(true);
-                const params = new URLSearchParams();
-                if (status !== "all") params.set("status", status);
+                const params = new URLSearchParams({ page: String(page), limit: String(limit) });
                 if (q.trim()) params.set("q", q.trim());
-                params.set("page", String(page));
-                params.set("limit", String(limit));
-                const res = await fetch(`/api/tenant/purchases/orders?${params.toString()}`, { signal: controller.signal });
-                if (!res.ok) throw new Error("Erreur chargement commandes");
+                const res = await fetch(`/api/tenant/purchases/receipts?${params.toString()}`, { signal: controller.signal });
+                if (!res.ok) throw new Error();
                 const data = await res.json();
-                setItems((data?.items || []) as OrderListItem[]);
+                setItems((data?.items || []) as ReceiptItem[]);
                 if (data?.pagination) {
                     setTotal(Number(data.pagination.total || 0));
                     setTotalPages(Number(data.pagination.totalPages || 0));
                 }
-            } catch (e) {
-                // no-op UI simple
-            } finally {
-                setLoading(false);
-            }
+            } catch {
+            } finally { setLoading(false); }
         };
         run();
         return () => controller.abort();
-    }, [status, q, page, limit]);
-
-    const filtered = useMemo(() => items, [items]);
+    }, [q, page, limit]);
 
     return (
         <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-semibold">Commandes d'achat</h1>
+                <h1 className="text-2xl font-semibold">Réceptions</h1>
             </div>
 
             <Card className="p-4">
                 <div className="flex items-center gap-2 mb-3">
-                    <div className="w-64">
-                        <Select value={status} onValueChange={setStatus}>
-                            <SelectTrigger><SelectValue placeholder="Statut" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Tous les statuts</SelectItem>
-                                <SelectItem value="created">Créée</SelectItem>
-                                <SelectItem value="confirmed">Confirmée</SelectItem>
-                                <SelectItem value="received">Réceptionnée</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex-1 max-w-sm">
-                        <Input placeholder="Recherche fournisseur" value={q} onChange={(e) => setQ(e.target.value)} />
-                    </div>
+                    <div className="flex-1 max-w-sm"><Input placeholder="Rechercher (ID ou fournisseur)" value={q} onChange={(e) => setQ(e.target.value)} /></div>
                     <div className="text-sm text-gray-500">{loading ? "Chargement…" : ""}</div>
                 </div>
 
@@ -87,46 +63,43 @@ export default function PurchaseOrdersPage() {
                     <table className="w-full text-sm">
                         <thead className="text-left text-gray-500">
                             <tr className="border-b">
-                                <th className="py-2">PO</th>
+                                <th className="py-2">Réception</th>
+                                <th className="py-2">Commande</th>
                                 <th className="py-2">Fournisseur</th>
-                                <th className="py-2">Total</th>
                                 <th className="py-2">Statut</th>
+                                <th className="py-2">Lots</th>
                                 <th className="py-2">Date</th>
                                 <th className="py-2"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((o) => (
-                                <tr key={o.id} className="border-b hover:bg-gray-50">
-                                    <td className="py-2">{o.id.substring(0, 8).toUpperCase()}</td>
-                                    <td className="py-2">{o.supplier}</td>
-                                    <td className="py-2">{money(o.total)} FCFA</td>
+                            {items.map((r) => (
+                                <tr key={r.id} className="border-b hover:bg-gray-50">
+                                    <td className="py-2">{r.id.substring(0, 8).toUpperCase()}</td>
+                                    <td className="py-2">{r.purchaseOrderId.substring(0, 8).toUpperCase()}</td>
+                                    <td className="py-2">{r.supplier || "—"}</td>
                                     <td className="py-2">
-                                        {o.status === 'created' && <Badge variant="secondary">Créée</Badge>}
-                                        {o.status === 'confirmed' && <Badge>Confirmée</Badge>}
-                                        {o.status === 'received' && <Badge className="bg-green-600 hover:bg-green-600">Réceptionnée</Badge>}
+                                        {r.status === 'not_received' && <Badge variant="secondary">Non réceptionnée</Badge>}
+                                        {r.status === 'partial' && <Badge>Partielle</Badge>}
+                                        {r.status === 'received' && <Badge className="bg-green-600 hover:bg-green-600">Complète</Badge>}
                                     </td>
-                                    <td className="py-2">{new Date(o.createdAt).toLocaleDateString('fr-FR')}</td>
+                                    <td className="py-2">{r.entryCount}</td>
+                                    <td className="py-2">{new Date(r.createdAt).toLocaleDateString('fr-FR')}</td>
                                     <td className="py-2 text-right">
                                         <div className="flex items-center justify-end gap-2">
-                                            <Button variant="outline" size="sm" asChild><Link href={`/purchases/orders/${o.id}`}>Voir</Link></Button>
-                                            {o.status === 'confirmed' && (
-                                                <Button variant="outline" size="sm" asChild>
-                                                    <Link href={`/purchases/orders/${o.id}`}>Réceptionner</Link>
-                                                </Button>
-                                            )}
+                                            <Button variant="outline" size="sm" asChild><Link href={`/purchases/receipts/${r.id}`}>Voir la réception</Link></Button>
+                                            <Button variant="outline" size="sm" asChild><Link href={`/purchases/orders/${r.purchaseOrderId}`}>Voir la commande</Link></Button>
                                         </div>
                                     </td>
                                 </tr>
                             ))}
-                            {filtered.length === 0 && (
-                                <tr><td colSpan={6} className="py-8 text-center text-gray-500">Aucune commande</td></tr>
+                            {items.length === 0 && (
+                                <tr><td colSpan={7} className="py-8 text-center text-gray-500">Aucune réception</td></tr>
                             )}
                         </tbody>
                     </table>
                 </div>
 
-                {/* Pagination */}
                 <div className="flex items-center justify-between mt-3 text-sm">
                     <div className="text-gray-600">{loading ? 'Chargement…' : `Page ${page} / ${Math.max(totalPages, 1)} • ${total} éléments`}</div>
                     <div className="flex items-center gap-2">

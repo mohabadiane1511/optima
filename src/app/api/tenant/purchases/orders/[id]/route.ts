@@ -20,11 +20,27 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const tenantId = await resolveTenantId(request);
     if (!tenantId) return NextResponse.json({ error: 'Tenant introuvable' }, { status: 400 });
     const db = prisma as any;
-    const po = await db.purchaseOrder.findFirst({ where: { id: params.id, tenantId }, include: { lines: true, rfq: true } });
+    const po = await db.purchaseOrder.findFirst({ where: { id: params.id, tenantId }, include: { lines: true, rfq: true, goodsReceipt: true } });
     if (!po) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
     // Inclure infos tenant (nom, logo)
     const tenant = await db.tenant.findUnique({ where: { id: tenantId }, select: { name: true, logoUrl: true } });
-    return NextResponse.json({ ...po, tenant });
+    // Calcul rapide des quantités reçues cumulées si réception existe
+    let receipt: any = null;
+    if (po.goodsReceipt) {
+      const gr = await db.goodsReceipt.findFirst({ where: { id: po.goodsReceipt.id, tenantId }, select: { id: true, status: true, createdAt: true } });
+      const entries = await db.goodsReceiptEntry.findMany({ where: { tenantId, goodsReceiptId: po.goodsReceipt.id }, select: { id: true } });
+      const entryIds = entries.map((e: any) => e.id);
+      let receivedByLine: Record<string, number> = {};
+      if (entryIds.length) {
+        const lines = await db.goodsReceiptEntryLine.findMany({ where: { tenantId, entryId: { in: entryIds } }, select: { purchaseOrderLineId: true, qtyReceived: true } });
+        for (const l of lines) {
+          const key = l.purchaseOrderLineId;
+          receivedByLine[key] = (receivedByLine[key] || 0) + Number(l.qtyReceived || 0);
+        }
+      }
+      receipt = { id: gr?.id, status: gr?.status, receivedByLine };
+    }
+    return NextResponse.json({ ...po, tenant, receipt });
   } catch (e) {
     console.error('GET /api/tenant/purchases/orders/[id] error', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
