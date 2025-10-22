@@ -4,8 +4,40 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Search, Bell, User } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 
 export function TenantTopbar() {
+    const [profile, setProfile] = useState<{ firstName: string; lastName: string; email: string } | null>(null);
+    const [role, setRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const [pRes, rRes] = await Promise.all([
+                    fetch('/api/tenant/me/profile', { cache: 'no-store' }),
+                    fetch('/api/tenant/me', { cache: 'no-store' }),
+                ]);
+                if (pRes.ok) {
+                    const p = await pRes.json();
+                    setProfile({ firstName: p.firstName || '', lastName: p.lastName || '', email: p.email || '' });
+                }
+                if (rRes.ok) {
+                    const r = await rRes.json();
+                    setRole(r?.role || null);
+                }
+            } catch { }
+        })();
+    }, []);
+
+    const initials = useMemo(() => {
+        const f = profile?.firstName?.trim?.() || '';
+        const l = profile?.lastName?.trim?.() || '';
+        const i1 = f ? f[0].toUpperCase() : '';
+        const i2 = l ? l[0].toUpperCase() : '';
+        return (i1 + i2) || 'U';
+    }, [profile]);
+
     const handleLogout = async () => {
         try {
             await fetch('/api/auth/logout', { method: 'POST', cache: 'no-store' });
@@ -42,15 +74,29 @@ export function TenantTopbar() {
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="flex items-center space-x-2">
-                                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                    <User className="h-4 w-4" />
+                                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-semibold text-gray-700">
+                                    {initials}
                                 </div>
-                                <span className="hidden md:block text-sm font-medium">Mon Compte</span>
+                                <span className="hidden md:block text-sm font-medium truncate max-w-[160px]">
+                                    {profile?.firstName ? `${profile.firstName} ${profile?.lastName || ''}`.trim() : 'Mon Compte'}
+                                </span>
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuItem>Profil</DropdownMenuItem>
-                            <DropdownMenuItem>Paramètres</DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-64">
+                            <div className="px-3 py-2 text-sm">
+                                <div className="font-medium text-gray-900">
+                                    {profile?.firstName || profile?.lastName ? `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() : 'Utilisateur'}
+                                </div>
+                                <div className="text-gray-500 truncate">{profile?.email || ''}</div>
+                            </div>
+                            <DropdownMenuItem asChild>
+                                <Link href="/settings">Profil</Link>
+                            </DropdownMenuItem>
+                            {role === 'admin' && (
+                                <DropdownMenuItem asChild>
+                                    <Link href="/settings">Paramètres</Link>
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={handleLogout} className="text-red-600">Se déconnecter</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
