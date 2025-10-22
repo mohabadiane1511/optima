@@ -326,6 +326,7 @@ model PurchaseOrderLine {
   createdAt       DateTime @default(now())
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
   receiptEntryLines GoodsReceiptEntryLine[]
+  supplierInvoiceLines SupplierInvoiceLine[]
 
   @@index([tenantId])
   @@index([tenantId, purchaseOrderId])
@@ -372,6 +373,73 @@ model GoodsReceiptEntryLine {
   @@index([tenantId])
   @@index([tenantId, entryId])
   @@index([tenantId, purchaseOrderLineId])
+}
+
+// Achats — Factures fournisseurs (comptable légère)
+model SupplierInvoice {
+  id               String   @id @default(cuid())
+  tenantId         String
+  purchaseOrderId  String   // une facture par commande (réception complète requise)
+  goodsReceiptId   String   // réception liée (doit être 'received')
+  supplier         String?
+  number           String?
+  status           String   @default("draft") // draft | posted | paid | cancelled
+  invoiceDate      DateTime @default(now())
+  dueDate          DateTime?
+  totalHT          Decimal  @db.Decimal(12,2) @default(0)
+  totalTVA         Decimal  @db.Decimal(12,2) @default(0)
+  totalTTC         Decimal  @db.Decimal(12,2) @default(0)
+  attachmentUrl        String?
+  attachmentPublicId   String?
+  attachmentName       String?
+  attachmentSize       Int?
+  uploadedAt           DateTime?
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lines            SupplierInvoiceLine[]
+  payments         SupplierPayment[]
+
+  @@index([tenantId])
+  @@index([tenantId, status, invoiceDate])
+  @@unique([tenantId, number])
+  @@unique([tenantId, purchaseOrderId])
+}
+
+model SupplierInvoiceLine {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  invoiceId           String
+  purchaseOrderLineId String?
+  name                String
+  qty                 Decimal  @db.Decimal(12,2)
+  unit                String   @default("unité")
+  unitPrice           Decimal  @db.Decimal(12,2)
+  taxRate             Decimal  @db.Decimal(5,2) @default(0)
+  totalHT             Decimal  @db.Decimal(12,2)
+  totalTVA            Decimal  @db.Decimal(12,2)
+  totalTTC            Decimal  @db.Decimal(12,2)
+  createdAt           DateTime @default(now())
+  invoice             SupplierInvoice @relation(fields: [invoiceId], references: [id])
+  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, invoiceId])
+}
+
+model SupplierPayment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  invoiceId  String
+  amount     Decimal  @db.Decimal(12,2)
+  method     String   // cash | transfer | mobile | card | other
+  reference  String?
+  paidAt     DateTime @default(now())
+  createdAt  DateTime @default(now())
+  invoice    SupplierInvoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, invoiceId])
 }
 
 // Idempotence pour certaines actions (ex: send RFQ, convert RFQ)
