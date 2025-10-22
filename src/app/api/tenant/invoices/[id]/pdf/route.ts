@@ -66,12 +66,38 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     let logoWidth = 0;
     if (tenant.logoUrl) {
       try {
-        // Télécharger l'image depuis Cloudinary
-        const response = await fetch(tenant.logoUrl);
-        if (response.ok) {
-          const imageBytes = await response.arrayBuffer();
-          const logoImage = await pdfDoc.embedPng(imageBytes);
+        async function tryEmbedFromUrl(url: string) {
+          const resp = await fetch(url);
+          if (!resp.ok) return null;
+          const ct = (resp.headers.get('content-type') || '').toLowerCase();
+          const bytes = await resp.arrayBuffer();
+          if (ct.includes('png')) return await pdfDoc.embedPng(bytes);
+          if (ct.includes('jpeg') || ct.includes('jpg')) return await pdfDoc.embedJpg(bytes);
+          if (ct.includes('webp')) {
+            // Fallback Cloudinary: forcer PNG si URL Cloudinary
+            try {
+              const u = new URL(url);
+              if (u.hostname.includes('res.cloudinary.com')) {
+                const parts = u.pathname.split('/');
+                const idx = parts.findIndex((p) => p === 'upload');
+                if (idx !== -1) {
+                  // insérer transformation f_png
+                  parts.splice(idx + 1, 0, 'f_png');
+                  u.pathname = parts.join('/');
+                  const resp2 = await fetch(u.toString());
+                  if (resp2.ok) {
+                    const bytes2 = await resp2.arrayBuffer();
+                    return await pdfDoc.embedPng(bytes2);
+                  }
+                }
+              }
+            } catch {}
+          }
+          return null;
+        }
 
+        const logoImage = await tryEmbedFromUrl(tenant.logoUrl);
+        if (logoImage) {
           // Redimensionner le logo (max 80x80)
           const maxSize = 80;
           const aspectRatio = logoImage.width / logoImage.height;
