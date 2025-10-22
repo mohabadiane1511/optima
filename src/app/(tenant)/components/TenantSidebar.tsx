@@ -61,7 +61,7 @@ export function TenantSidebar() {
                                 { name: 'Demandes de prix', href: '/purchases/rfq' },
                                 { name: "Commandes d'achat", href: '/purchases/orders' },
                                 { name: 'Réceptions', href: '/purchases/receipts' },
-                                { name: 'Factures fournisseurs', href: '/purchases/bills' },
+                                { name: 'Factures fournisseurs', href: '/purchases/invoices' },
                             ].map((sub) => {
                                 const isActive = pathname === sub.href;
                                 return (

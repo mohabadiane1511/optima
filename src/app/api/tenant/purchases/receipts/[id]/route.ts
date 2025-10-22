@@ -50,6 +50,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       remaining: Math.max(0, Number(l.qty || 0) - Number(sumByLine[l.id] || 0))
     }));
 
+    // Chercher une facture fournisseur liée à la commande (une par PO)
+    const invoice = await db.supplierInvoice.findFirst({ where: { tenantId, purchaseOrderId: gr.purchaseOrderId }, select: { id: true, status: true } });
+
     return NextResponse.json({
       id: gr.id,
       status: gr.status,
@@ -57,6 +60,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       createdAt: gr.createdAt,
       purchaseOrder: { id: gr.purchaseOrderId, supplier: gr.purchaseOrder?.supplier || null },
       lines: poLines,
+      invoice: invoice ? { id: invoice.id, status: invoice.status } : null,
       history: entries.map((e: any) => ({
         id: e.id,
         createdAt: e.createdAt,

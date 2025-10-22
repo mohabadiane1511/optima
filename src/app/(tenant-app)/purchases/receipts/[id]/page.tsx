@@ -14,6 +14,7 @@ type ReceiptDetail = {
     purchaseOrder: { id: string; supplier: string | null };
     lines: { id?: string; name: string; ordered: number; received: number; remaining: number }[];
     history: { id: string; createdAt: string; note?: string | null; lines: { poLineId: string; qty: number }[] }[];
+    invoice?: { id: string; status: string } | null;
 };
 
 export default function ReceiptDetailPage() {
@@ -82,6 +83,29 @@ export default function ReceiptDetailPage() {
                     )}
                 </div>
             </Card>
+
+            {/* Actions – Facturer quand complète */}
+            {data.status === 'received' && (
+                <div className="flex justify-end">
+                    {data.invoice?.id ? (
+                        <Button variant="outline" disabled>Déjà facturée</Button>
+                    ) : (
+                        <Button onClick={async () => {
+                            try {
+                                const res = await fetch(`/api/tenant/purchases/invoices/from-receipt/${data.id}`, { method: 'POST' });
+                                if (!res.ok) {
+                                    const t = await res.json().catch(() => ({} as any));
+                                    alert(t?.error || 'Erreur lors de la création de la facture');
+                                    return;
+                                }
+                                const j = await res.json();
+                                if (j?.id) router.push(`/purchases/invoices/${j.id}`);
+                            } catch {
+                            }
+                        }}>Facturer</Button>
+                    )}
+                </div>
+            )}
 
             <Card className="p-4">
                 <div className="font-medium mb-2">Synthèse par ligne</div>
