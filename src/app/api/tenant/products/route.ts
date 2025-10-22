@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 import { logAuditEvent } from '@/lib/audit';
 
+export const revalidate = 0;
+
 const db = prisma as any;
 
 function serializeProduct(p: any, stockMap: Record<string, any>, categoryName?: string | null) {

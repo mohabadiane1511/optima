@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 
+export const revalidate = 0;
+
 
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();

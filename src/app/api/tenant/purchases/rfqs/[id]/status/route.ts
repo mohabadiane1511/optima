@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 import { logAuditEvent } from '@/lib/audit';
 
+export const revalidate = 0;
+
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
   const raw = jar.get('tenant_session')?.value;

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 type Line = { productId?: string; name: string; sku?: string; qty: number; unit: string; price: number; tva: number };
@@ -79,6 +80,8 @@ export default function NewInvoicePage() {
         } catch (e: any) { toast.error('Erreur: ' + e.message); return null; }
     }
 
+    const [saving, setSaving] = useState(false);
+    const [issuing, setIssuing] = useState(false);
     async function onSaveDraft() {
         const id = await createDraft();
         if (id) window.location.href = `/sales/invoices/${id}`;
@@ -88,12 +91,14 @@ export default function NewInvoicePage() {
         const id = await createDraft();
         if (!id) return;
         try {
+            setIssuing(true);
             const res = await fetch(`/api/tenant/invoices/${id}/issue`, { method: 'POST' });
             const data = await res.json();
             if (!res.ok) { toast.error(data.error || 'Émission impossible'); return; }
             toast.success('Facture émise');
             window.location.href = `/sales/invoices/${id}`;
         } catch (e: any) { toast.error('Erreur: ' + e.message); }
+        finally { setIssuing(false); }
     }
 
     return (
@@ -107,8 +112,8 @@ export default function NewInvoicePage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={onSaveDraft}>Enregistrer brouillon</Button>
-                    <Button onClick={onIssue}>Émettre</Button>
+                    <Button variant="outline" onClick={async () => { setSaving(true); await onSaveDraft(); setSaving(false); }} disabled={saving || issuing}>{saving ? (<><Spinner className="mr-2" />Enregistrement…</>) : 'Enregistrer brouillon'}</Button>
+                    <Button onClick={onIssue} disabled={issuing || saving}>{issuing ? (<><Spinner className="mr-2" />Émission…</>) : 'Émettre'}</Button>
                 </div>
             </div>
 

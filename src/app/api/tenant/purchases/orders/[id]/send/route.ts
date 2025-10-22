@@ -6,6 +6,8 @@ import { logAuditEvent } from '@/lib/audit';
 import { sendMail } from '@/lib/mailer';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
+export const revalidate = 0;
+
 async function resolveTenantId(request: NextRequest): Promise<string | null> {
   const jar = await cookies();
   const raw = jar.get('tenant_session')?.value;

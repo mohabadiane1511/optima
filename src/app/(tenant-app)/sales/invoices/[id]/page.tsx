@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
+import { Spinner } from "@/components/ui/spinner";
 
 type Invoice = {
     id: string;
@@ -35,6 +36,9 @@ export default function InvoiceDetailPage() {
     const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState("");
     const [paymentMethod, setPaymentMethod] = useState("cash");
+    const [loadingIssue, setLoadingIssue] = useState(false);
+    const [loadingCancel, setLoadingCancel] = useState(false);
+    const [loadingRecord, setLoadingRecord] = useState(false);
 
     const paymentMethods = [
         { value: "cash", label: "Espèces" },
@@ -80,6 +84,7 @@ export default function InvoiceDetailPage() {
 
     async function issueInvoice(): Promise<boolean> {
         try {
+            setLoadingIssue(true);
             const res = await fetch(`/api/tenant/invoices/${id}/issue`, { method: 'POST' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Émission impossible');
@@ -89,7 +94,7 @@ export default function InvoiceDetailPage() {
         } catch (e: any) {
             toast.error(e.message);
             return false;
-        }
+        } finally { setLoadingIssue(false); }
     }
 
     function openPaymentDialog() {
@@ -125,6 +130,7 @@ export default function InvoiceDetailPage() {
             return;
         }
         try {
+            setLoadingRecord(true);
             const res = await fetch(`/api/tenant/invoices/${id}/payments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, method: paymentMethod }) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -133,6 +139,7 @@ export default function InvoiceDetailPage() {
             setPaymentAmount("");
             window.location.reload();
         } catch (e: any) { toast.error(e.message); }
+        finally { setLoadingRecord(false); }
     }
 
     if (loading) return <div className="p-6 text-sm text-gray-500">Chargement…</div>;
@@ -150,10 +157,11 @@ export default function InvoiceDetailPage() {
                     <Button variant="outline"><Printer className="h-4 w-4 mr-2" /> Imprimer</Button>
                     <Button variant="outline" onClick={() => window.open(`/api/tenant/invoices/${id}/pdf`, '_blank')}><Download className="h-4 w-4 mr-2" /> PDF</Button>
                     {inv.status === 'draft' && (
-                        <Button onClick={issueInvoice}>Émettre</Button>
+                        <Button onClick={issueInvoice} disabled={loadingIssue}>{loadingIssue ? (<><Spinner className="mr-2" />Émission…</>) : 'Émettre'}</Button>
                     )}
                     {(inv.status === 'draft' || inv.status === 'sent' || inv.status === 'overdue') && totals.paid === 0 && (
                         <Button variant="destructive" onClick={async () => {
+                            setLoadingCancel(true);
                             if (!confirm('Confirmer l\'annulation de cette facture ?')) return;
                             try {
                                 const res = await fetch(`/api/tenant/invoices/${id}/cancel`, { method: 'POST' });
@@ -162,7 +170,8 @@ export default function InvoiceDetailPage() {
                                 toast.success('Facture annulée');
                                 await reload();
                             } catch (e: any) { toast.error(e.message); }
-                        }}>Annuler</Button>
+                            finally { setLoadingCancel(false); }
+                        }} disabled={loadingCancel}>{loadingCancel ? (<><Spinner className="mr-2" />Annulation…</>) : 'Annuler'}</Button>
                     )}
                     {(inv.status === 'sent' || inv.status === 'overdue') && (
                         <Button onClick={openPaymentDialog} disabled={totals.balance <= 0}>Enregistrer paiement</Button>
@@ -285,9 +294,7 @@ export default function InvoiceDetailPage() {
                         <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
                             Annuler
                         </Button>
-                        <Button onClick={recordPayment}>
-                            Enregistrer
-                        </Button>
+                        <Button onClick={recordPayment} disabled={loadingRecord}>{loadingRecord ? (<><Spinner className="mr-2" />Enregistrement…</>) : 'Enregistrer'}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

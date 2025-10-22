@@ -11,6 +11,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, MoreHorizontal, Package, Upload, Download, Filter, History, FileDown } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
 
 type Product = {
     id: string;
@@ -60,6 +62,7 @@ export default function ProductsPage() {
     const [moveQty, setMoveQty] = useState<string>("");
     const [moveProduct, setMoveProduct] = useState<Product | null>(null);
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [moving, setMoving] = useState(false);
     const [historyRows, setHistoryRows] = useState<{ id: string; type: string; qty: number; createdAt: string; createdBy: string | null; createdByName?: string | null; createdByEmail?: string | null; productName?: string | null; productSku?: string | null }[]>([]);
     const [recentMoves, setRecentMoves] = useState<typeof historyRows>([]);
     const [exportOpen, setExportOpen] = useState(false);
@@ -113,7 +116,7 @@ export default function ProductsPage() {
         (async () => {
             setChartLoading(true);
             try {
-                const params = new URLSearchParams({ granularity, window: (granularity  === 'daily' ? 7 : granularity === 'weekly' ? 12 : 12).toString() });
+                const params = new URLSearchParams({ granularity, window: (granularity === 'daily' ? 7 : granularity === 'weekly' ? 12 : 12).toString() });
                 if (chartProductId && chartProductId !== 'ALL') params.set('productId', chartProductId);
                 const res = await fetch(`/api/tenant/stock-movements/summary?${params.toString()}`, { cache: 'no-store' });
                 const data = await res.json();
@@ -160,10 +163,12 @@ export default function ProductsPage() {
         })();
     }, [createOpen]);
 
+    const [creating, setCreating] = useState(false);
     async function createProduct(e: React.FormEvent) {
         e.preventDefault();
         if (!canSubmit) return;
         try {
+            setCreating(true);
             const res = await fetch('/api/tenant/products', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -181,9 +186,10 @@ export default function ProductsPage() {
             setCreateOpen(false);
             setForm({ sku: "", name: "", salePrice: "", purchasePrice: "", categoryId: "" });
             await loadProducts();
+            try { toast.success('Produit créé'); } catch { }
         } catch {
-            alert('Création impossible. Vérifiez les champs ou le SKU (unique).');
-        }
+            try { toast.error('Création impossible. Vérifiez les champs ou le SKU (unique).'); } catch { }
+        } finally { setCreating(false); }
     }
 
     const filtered = useMemo(() => {
@@ -488,8 +494,8 @@ export default function ProductsPage() {
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Annuler</Button>
-                            <Button type="submit" disabled={!canSubmit}>Créer</Button>
+                            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>Annuler</Button>
+                            <Button type="submit" disabled={!canSubmit || creating}>{creating ? (<><Spinner className="mr-2" />Création…</>) : 'Créer'}</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -515,11 +521,12 @@ export default function ProductsPage() {
                                 setForm(prev => ({ ...prev, categoryId: data.id }));
                                 setCatName("");
                                 setCatOpen(false);
+                                try { toast.success('Catégorie créée'); } catch { }
                             } else {
-                                alert(data.error || 'Erreur lors de la création de la catégorie');
+                                try { toast.error(data.error || 'Erreur lors de la création de la catégorie'); } catch { }
                             }
                         } catch {
-                            alert('Erreur réseau');
+                            try { toast.error('Erreur réseau'); } catch { }
                         }
                     }} className="space-y-4">
                         <div className="space-y-2">
@@ -549,6 +556,7 @@ export default function ProductsPage() {
                         const qty = Number(moveQty);
                         if (!qty || qty <= 0) return;
                         try {
+                            setMoving(true);
                             const res = await fetch('/api/tenant/stock-movements', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -559,17 +567,18 @@ export default function ProductsPage() {
                             setMoveProduct(null);
                             setMoveQty("");
                             await loadProducts();
+                            try { toast.success('Mouvement enregistré'); } catch { }
                         } catch {
-                            alert('Mouvement impossible');
-                        }
+                            try { toast.error('Mouvement impossible'); } catch { }
+                        } finally { setMoving(false); }
                     }} className="space-y-4">
                         <div className="space-y-2">
                             <label className="text-sm text-gray-600">Quantité</label>
                             <Input type="number" inputMode="decimal" value={moveQty} onChange={(e) => setMoveQty(e.target.value)} placeholder="0" required />
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>Annuler</Button>
-                            <Button type="submit">Valider</Button>
+                            <Button type="button" variant="outline" onClick={() => setMoveOpen(false)} disabled={moving}>Annuler</Button>
+                            <Button type="submit" disabled={moving}>{moving ? (<><Spinner className="mr-2" />Validation…</>) : 'Valider'}</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
