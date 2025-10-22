@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const revalidate = 0;
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { resolveTenantFromHost } from '@/lib/tenant/host';

@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Filter, FileDown, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 
 type InvoiceRow = {
     id: string;
@@ -67,7 +69,7 @@ export default function InvoicesListPage() {
             setRows(mapped);
             setTotalPages(data.pagination?.totalPages || 1);
             setTotalInvoices(data.pagination?.total || 0);
-        } catch (e: any) { setError(e.message); }
+        } catch (e: any) { setError(e.message); try { toast.error(e.message); } catch { } }
         finally { setLoading(false); }
     };
 
@@ -288,7 +290,13 @@ export default function InvoicesListPage() {
                     <p className="text-gray-600">Suivi des ventes et paiements</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline"><FileDown className="h-4 w-4 mr-2" /> Export CSV</Button>
+                    <Button variant="outline" onClick={async () => {
+                        try {
+                            const url = '/api/tenant/invoices/export';
+                            window.location.href = url;
+                            try { toast.success('Export lancé'); } catch { }
+                        } catch { }
+                    }}><FileDown className="h-4 w-4 mr-2" /> Export CSV</Button>
                     <Button asChild><Link href="/sales/invoices/new"><Plus className="h-4 w-4 mr-2" /> Nouvelle facture</Link></Button>
                 </div>
             </div>
