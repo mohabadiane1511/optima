@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 import { setTenantSessionCookie } from '@/lib/tenant/cookies';
 import { logAuditEvent } from '@/lib/audit';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tenant introuvable (host invalide)' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await db.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash) {
       return NextResponse.json({ error: 'Identifiants invalides' }, { status: 401 });
     }
@@ -28,12 +28,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Identifiants invalides' }, { status: 401 });
     }
 
-    const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+    const tenant = await db.tenant.findUnique({ where: { slug: tenantSlug } });
     if (!tenant) {
       return NextResponse.json({ error: 'Tenant inconnu' }, { status: 404 });
     }
 
-    const membership = await prisma.membership.findFirst({ where: { userId: user.id, tenantId: tenant.id } });
+    const membership = await db.membership.findFirst({ where: { userId: user.id, tenantId: tenant.id } });
     if (!membership) {
       return NextResponse.json({ error: 'Accès non autorisé à ce tenant' }, { status: 403 });
     }
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       const { email } = await request.json();
       const { tenantSlug } = resolveTenantFromHost(request.headers.get('host'));
       if (tenantSlug) {
-        const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+        const tenant = await db.tenant.findUnique({ where: { slug: tenantSlug } });
         if (tenant) {
           await logAuditEvent({ tenantId: tenant.id, action: 'auth.login.failed', entity: 'user', metadata: { email } }, request as any);
         }

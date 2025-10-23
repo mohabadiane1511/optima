@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 // GET /api/admin/tenants/[id] - Récupérer un tenant spécifique
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await db.tenant.findUnique({
       where: { id: params.id },
       include: {
         _count: {
@@ -61,7 +61,7 @@ export async function PUT(
 
     // Vérifier que le slug est unique (sauf pour le tenant actuel)
     if (slug) {
-      const existingTenant = await prisma.tenant.findFirst({
+      const existingTenant = await db.tenant.findFirst({
         where: {
           slug,
           id: { not: params.id },
@@ -77,7 +77,7 @@ export async function PUT(
     }
 
     // Mettre à jour le tenant
-    const tenant = await prisma.tenant.update({
+    const tenant = await db.tenant.update({
       where: { id: params.id },
       data: {
         name,
@@ -119,7 +119,7 @@ export async function DELETE(
 ) {
   try {
     // Désactiver le tenant au lieu de le supprimer
-    const tenant = await prisma.tenant.update({
+    const tenant = await db.tenant.update({
       where: { id: params.id },
       data: { status: 'inactive' },
       include: {
@@ -153,7 +153,7 @@ export async function PATCH(
 ) {
   try {
     // Réactiver le tenant
-    const tenant = await prisma.tenant.update({
+    const tenant = await db.tenant.update({
       where: { id: params.id },
       data: { status: 'active' },
       include: {
