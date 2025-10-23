@@ -130,14 +130,14 @@ export default function MembersPage() {
                         </div>
                     </div>
 
-                    <div className="border rounded-md overflow-hidden">
+                    <div className="border rounded-md overflow-hidden w-full overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Nom</TableHead>
                                     <TableHead>Email</TableHead>
-                                    <TableHead>Rôle</TableHead>
-                                    <TableHead>État</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Rôle</TableHead>
+                                    <TableHead className="hidden sm:table-cell">État</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -151,8 +151,8 @@ export default function MembersPage() {
                                     <TableRow key={m.id}>
                                         <TableCell>{m.name || '—'}</TableCell>
                                         <TableCell>{m.email}</TableCell>
-                                        <TableCell className="capitalize">{m.role}</TableCell>
-                                        <TableCell>
+                                        <TableCell className="capitalize hidden sm:table-cell">{m.role}</TableCell>
+                                        <TableCell className="hidden sm:table-cell">
                                             {m.active ? (
                                                 <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Actif</span>
                                             ) : (

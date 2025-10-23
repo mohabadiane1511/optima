@@ -25,13 +25,6 @@ type Product = {
     active: boolean;
 };
 
-const MOCK_PRODUCTS: Product[] = [
-    { id: "1", sku: "PRD-0001", name: "Riz parfumé 5kg", category: "Alimentaire", salePrice: 6500, purchasePrice: 5200, stock: 42, active: true },
-    { id: "2", sku: "PRD-0002", name: "Huile 1L", category: "Alimentaire", salePrice: 1500, purchasePrice: 1200, stock: 8, active: true },
-    { id: "3", sku: "PRD-0003", name: "Savon liquide", category: "Hygiène", salePrice: 1800, purchasePrice: 1300, stock: 0, active: false },
-    { id: "4", sku: "PRD-0004", name: "Sucre 1kg", category: "Alimentaire", salePrice: 900, purchasePrice: 700, stock: 120, active: true },
-];
-
 export default function ProductsPage() {
     const [query, setQuery] = useState("");
     const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
@@ -222,17 +215,17 @@ export default function ProductsPage() {
                         </li>
                     </ol>
                 </nav>
-                <div className="mt-2 flex items-center justify-between">
-                    <div>
+                <div className="mt-2 flex items-start md:items-center justify-between flex-col md:flex-row gap-3">
+                    <div className="w-full md:w-auto">
                         <h1 className="text-2xl font-bold text-gray-900">Produits & Stocks</h1>
                         <p className="text-gray-600">Catalogue produits et niveaux de stock </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={() => setExportOpen(true)}><FileDown className="h-4 w-4 mr-2" /> Export mouvements</Button>
-                        <Button variant="outline" asChild>
+                    <div className="w-full md:w-auto flex flex-wrap items-center gap-2">
+                        <Button variant="outline" onClick={() => setExportOpen(true)} className="w-full sm:w-auto"><FileDown className="h-4 w-4 mr-2" /> Export mouvements</Button>
+                        <Button variant="outline" asChild className="w-full sm:w-auto">
                             <a href="/api/tenant/products/export"><FileDown className="h-4 w-4 mr-2" /> Export produits</a>
                         </Button>
-                        <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" /> Nouveau produit</Button>
+                        <Button onClick={() => setCreateOpen(true)} className="w-full sm:w-auto"><Plus className="h-4 w-4 mr-2" /> Nouveau produit</Button>
                     </div>
                 </div>
             </div>
@@ -398,11 +391,11 @@ export default function ProductsPage() {
                                     <TableRow>
                                         <TableHead>SKU</TableHead>
                                         <TableHead>Produit</TableHead>
-                                        <TableHead>Catégorie</TableHead>
+                                        <TableHead className="hidden sm:table-cell">Catégorie</TableHead>
                                         <TableHead className="text-right">Prix vente</TableHead>
-                                        <TableHead className="text-right">Prix achat</TableHead>
-                                        <TableHead className="text-right">Stock</TableHead>
-                                        <TableHead className="text-center">Statut</TableHead>
+                                        <TableHead className="text-right hidden md:table-cell">Prix achat</TableHead>
+                                        <TableHead className="text-right hidden md:table-cell">Stock</TableHead>
+                                        <TableHead className="text-center hidden sm:table-cell">Statut</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -410,14 +403,14 @@ export default function ProductsPage() {
                                     {filtered.map((p) => (
                                         <TableRow key={p.id} className="hover:bg-gray-50">
                                             <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                                            <TableCell>{p.name}</TableCell>
-                                            <TableCell>{p.category}</TableCell>
+                                            <TableCell className="max-w-[220px] truncate" title={p.name}>{p.name}</TableCell>
+                                            <TableCell className="hidden sm:table-cell">{p.category}</TableCell>
                                             <TableCell className="text-right">{nf.format(p.salePrice)} FCFA</TableCell>
-                                            <TableCell className="text-right text-gray-500">{nf.format(p.purchasePrice)} FCFA</TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell className="text-right text-gray-500 hidden md:table-cell">{nf.format(p.purchasePrice)} FCFA</TableCell>
+                                            <TableCell className="text-right hidden md:table-cell">
                                                 <span className={p.stock === 0 ? "text-red-600 font-medium" : p.stock < 10 ? "text-orange-600" : ""}>{p.stock}</span>
                                             </TableCell>
-                                            <TableCell className="text-center">
+                                            <TableCell className="text-center hidden sm:table-cell">
                                                 <Badge variant={p.active ? "default" : "secondary"}>{p.active ? "Actif" : "Inactif"}</Badge>
                                             </TableCell>
                                             <TableCell className="text-right">

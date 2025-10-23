@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Search, Bell, User } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Menu } from 'lucide-react';
 
 export function TenantTopbar() {
     const [profile, setProfile] = useState<{ firstName: string; lastName: string; email: string } | null>(null);
@@ -47,9 +49,42 @@ export function TenantTopbar() {
         }
     };
     return (
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
+                    {/* Burger mobile */}
+                    <Sheet>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon" className="md:hidden" aria-label="Ouvrir le menu">
+                                <Menu className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="p-0 w-72">
+                            <SheetHeader className="px-4 pt-4 pb-2 text-left">
+                                <SheetTitle>Navigation</SheetTitle>
+                            </SheetHeader>
+                            <nav className="px-2 py-2 space-y-1">
+                                <Link href="/dashboard" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Dashboard</Link>
+                                <Link href="/products" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Produits & Stocks</Link>
+                                <Link href="/sales/invoices" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Ventes / Factures</Link>
+                                <div className="mt-2 px-3 text-xs text-gray-500">Achats</div>
+                                <div className="ml-1 space-y-1">
+                                    <Link href="/purchases/rfq" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Demandes de prix</Link>
+                                    <Link href="/purchases/orders" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Commandes</Link>
+                                    <Link href="/purchases/receipts" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Réceptions</Link>
+                                    <Link href="/purchases/invoices" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Factures fournisseurs</Link>
+                                </div>
+                                {role === 'admin' && (
+                                    <>
+                                        <div className="mt-2 px-3 text-xs text-gray-500">Administration</div>
+                                        <Link href="/members" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Utilisateurs</Link>
+                                        <Link href="/settings" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Paramètres</Link>
+                                        <Link href="/journal" className="block px-3 py-2 rounded-lg text-sm hover:bg-gray-50">Journal</Link>
+                                    </>
+                                )}
+                            </nav>
+                        </SheetContent>
+                    </Sheet>
                     <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                         <span className="text-white font-bold text-sm">O</span>
                     </div>
@@ -59,7 +94,7 @@ export function TenantTopbar() {
                     </div>
                 </div>
 
-                <div className="hidden md:flex flex-1 max-w-md mx-8">
+                <div className="hidden md:flex flex-1 max-w-md mx-4 md:mx-8">
                     <div className="relative w-full">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                         <Input placeholder="Rechercher produits, clients..." className="pl-10" />
