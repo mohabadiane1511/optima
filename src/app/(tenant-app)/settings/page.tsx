@@ -29,6 +29,7 @@ export default function SettingsPage() {
     const [org, setOrg] = useState<OrgData | null>(null);
     const [form, setForm] = useState<{ logoUrl?: string; businessRegistration?: string; ninea?: string }>({});
     const [editing, setEditing] = useState(false);
+    const [myRole, setMyRole] = useState<string | null>(null);
 
     // Section profil utilisateur
     const [profileLoading, setProfileLoading] = useState(true);
@@ -41,6 +42,13 @@ export default function SettingsPage() {
         let mounted = true;
         (async () => {
             try {
+                // Charger mon rôle pour gérer la visibilité des sections
+                try {
+                    const r = await fetch('/api/tenant/me', { cache: 'no-store' });
+                    const rd = await r.json();
+                    if (mounted) setMyRole(rd?.role || null);
+                } catch { }
+
                 const res = await fetch('/api/tenant/organization', { cache: 'no-store' });
                 if (!res.ok) throw new Error('Impossible de charger les informations');
                 const data = (await res.json()) as OrgData;
@@ -137,87 +145,89 @@ export default function SettingsPage() {
 
             <Separator />
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Organisation</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-500"><Spinner /> Chargement…</div>
-                    ) : (
-                        <form onSubmit={onSave} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label>Régistre de commerce</Label>
-                                    <Input
-                                        value={form.businessRegistration ?? ''}
-                                        onChange={(e) => setForm((f) => ({ ...f, businessRegistration: e.target.value }))}
-                                        readOnly={!editing}
-                                        placeholder="Ex: SN-DKR-2024-XXXXX"
-                                    />
+            {myRole === 'admin' && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Organisation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? (
+                            <div className="flex items-center gap-2 text-sm text-gray-500"><Spinner /> Chargement…</div>
+                        ) : (
+                            <form onSubmit={onSave} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <Label>Régistre de commerce</Label>
+                                        <Input
+                                            value={form.businessRegistration ?? ''}
+                                            onChange={(e) => setForm((f) => ({ ...f, businessRegistration: e.target.value }))}
+                                            readOnly={!editing}
+                                            placeholder="Ex: SN-DKR-2024-XXXXX"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>NINEA</Label>
+                                        <Input
+                                            value={form.ninea ?? ''}
+                                            onChange={(e) => setForm((f) => ({ ...f, ninea: e.target.value }))}
+                                            readOnly={!editing}
+                                            placeholder="Ex: 123456789"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Logo (URL)</Label>
+                                        <Input
+                                            value={form.logoUrl ?? ''}
+                                            onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                                            readOnly={!editing}
+                                            placeholder="https://…"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>NINEA</Label>
-                                    <Input
-                                        value={form.ninea ?? ''}
-                                        onChange={(e) => setForm((f) => ({ ...f, ninea: e.target.value }))}
-                                        readOnly={!editing}
-                                        placeholder="Ex: 123456789"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Logo (URL)</Label>
-                                    <Input
-                                        value={form.logoUrl ?? ''}
-                                        onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
-                                        readOnly={!editing}
-                                        placeholder="https://…"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="flex items-center gap-3">
-                                <CldUploadWidget uploadPreset="optima-logos" onSuccess={onUpload} options={{ folder: 'optima-logos', multiple: false }}>
-                                    {({ open }) => (
-                                        <Button type="button" variant="secondary" onClick={() => open?.()} disabled={!editing}>
-                                            Télécharger un logo
+                                <div className="flex items-center gap-3">
+                                    <CldUploadWidget uploadPreset="optima-logos" onSuccess={onUpload} options={{ folder: 'optima-logos', multiple: false }}>
+                                        {({ open }) => (
+                                            <Button type="button" variant="secondary" onClick={() => open?.()} disabled={!editing}>
+                                                Télécharger un logo
+                                            </Button>
+                                        )}
+                                    </CldUploadWidget>
+                                    {form.logoUrl ? (
+                                        <img src={form.logoUrl} alt="Logo" className="h-10 w-auto rounded border" />
+                                    ) : null}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <Button type="button" onClick={onModifyClick} disabled={saving}>
+                                        {saving ? (
+                                            <span className="inline-flex items-center gap-2"><Spinner /> Enregistrement…</span>
+                                        ) : 'Modifier'}
+                                    </Button>
+                                    {editing && (
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={() => {
+                                                // Réinitialiser aux valeurs d'origine et sortir du mode édition
+                                                setForm({
+                                                    logoUrl: org?.logoUrl || '',
+                                                    businessRegistration: org?.businessRegistration || '',
+                                                    ninea: org?.ninea || '',
+                                                });
+                                                setEditing(false);
+                                                toast.info('Modifications annulées');
+                                            }}
+                                        >
+                                            Annuler
                                         </Button>
                                     )}
-                                </CldUploadWidget>
-                                {form.logoUrl ? (
-                                    <img src={form.logoUrl} alt="Logo" className="h-10 w-auto rounded border" />
-                                ) : null}
-                            </div>
-
-                            <div className="flex gap-3">
-                                <Button type="button" onClick={onModifyClick} disabled={saving}>
-                                    {saving ? (
-                                        <span className="inline-flex items-center gap-2"><Spinner /> Enregistrement…</span>
-                                    ) : 'Modifier'}
-                                </Button>
-                                {editing && (
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => {
-                                            // Réinitialiser aux valeurs d'origine et sortir du mode édition
-                                            setForm({
-                                                logoUrl: org?.logoUrl || '',
-                                                businessRegistration: org?.businessRegistration || '',
-                                                ninea: org?.ninea || '',
-                                            });
-                                            setEditing(false);
-                                            toast.info('Modifications annulées');
-                                        }}
-                                    >
-                                        Annuler
-                                    </Button>
-                                )}
-                            </div>
-                        </form>
-                    )}
-                </CardContent>
-            </Card>
+                                </div>
+                            </form>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             <Card>
                 <CardHeader>

@@ -33,9 +33,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tenant inconnu' }, { status: 404 });
     }
 
-    const membership = await db.membership.findFirst({ where: { userId: user.id, tenantId: tenant.id } });
+    const membership = await db.membership.findFirst({ where: { userId: user.id, tenantId: tenant.id, active: true } });
     if (!membership) {
-      return NextResponse.json({ error: 'Accès non autorisé à ce tenant' }, { status: 403 });
+      return NextResponse.json({ error: 'Compte utilisateur désactivé' }, { status: 403 });
     }
 
     // Set session cookie (simple payload; can be JWT later)

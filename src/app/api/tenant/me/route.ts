@@ -20,12 +20,12 @@ export async function GET(request: NextRequest) {
         tenantId = t?.id || null;
       }
     }
-    if (!tenantId || !userId) return NextResponse.json({ role: null }, { status: 200 });
+    if (!tenantId || !userId) return NextResponse.json({ role: null, userId: null }, { status: 200 });
     const db = prisma as any;
     const membership = await db.membership.findFirst({ where: { tenantId, userId }, select: { role: true } });
-    return NextResponse.json({ role: membership?.role || null });
+    return NextResponse.json({ role: membership?.role || null, userId });
   } catch (e) {
-    return NextResponse.json({ role: null }, { status: 200 });
+    return NextResponse.json({ role: null, userId: null }, { status: 200 });
   }
 }
 
