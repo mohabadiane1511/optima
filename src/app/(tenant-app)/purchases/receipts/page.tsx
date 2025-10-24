@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -56,7 +57,7 @@ export default function ReceiptsPage() {
             <Card className="p-4">
                 <div className="flex items-center gap-2 mb-3">
                     <div className="flex-1 max-w-sm"><Input placeholder="Rechercher (ID ou fournisseur)" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-                    <div className="text-sm text-gray-500">{loading ? "Chargement…" : ""}</div>
+                    <div className="text-sm text-gray-500">{loading ? <Skeleton className="h-4 w-24" /> : ""}</div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -73,7 +74,9 @@ export default function ReceiptsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {items.map((r) => (
+                            {loading ? (
+                                <tr><td colSpan={7} className="py-4"><div className="space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-5 w-5/6" /><Skeleton className="h-5 w-4/6" /></div></td></tr>
+                            ) : items.map((r) => (
                                 <tr key={r.id} className="border-b hover:bg-gray-50">
                                     <td className="py-2">{r.id.substring(0, 8).toUpperCase()}</td>
                                     <td className="py-2">{r.purchaseOrderId.substring(0, 8).toUpperCase()}</td>

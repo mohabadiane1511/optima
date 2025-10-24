@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type LogItem = {
@@ -30,16 +31,24 @@ export default function JournalPage() {
     const [retentionCutoff, setRetentionCutoff] = useState<string>('');
     const [purging, setPurging] = useState(false);
 
+    const [loading, setLoading] = useState(false);
     const load = async () => {
         const params = new URLSearchParams();
         params.set('page', String(page));
         if (action !== 'all') params.set('action', action);
         if (entity !== 'all') params.set('entity', entity);
-        const res = await fetch(`/api/tenant/audit-logs?${params.toString()}`, { cache: 'no-store' });
-        if (res.ok) {
-            const data = await res.json();
-            setItems(data.items || []);
-            setTotalPages(data.pagination?.totalPages || 1);
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/tenant/audit-logs?${params.toString()}`, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                setItems(data.items || []);
+                setTotalPages(data.pagination?.totalPages || 1);
+            } else {
+                setItems([]);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -156,7 +165,13 @@ export default function JournalPage() {
 
             <Card className="p-4">
                 <div className="divide-y">
-                    {items.map((l) => (
+                    {loading ? (
+                        <div className="space-y-2">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-5/6" />
+                            <Skeleton className="h-4 w-4/6" />
+                        </div>
+                    ) : items.map((l) => (
                         <div key={l.id} className="py-3 text-sm">
                             <div className="flex justify-between">
                                 <div className="font-medium">{sentence(l)}</div>

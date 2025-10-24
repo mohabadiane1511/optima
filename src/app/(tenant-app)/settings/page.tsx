@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { CldUploadWidget, CloudinaryUploadWidgetResults } from 'next-cloudinary';
 import { toast } from 'sonner';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type OrgData = {
     name: string;
@@ -152,7 +153,13 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent>
                         {loading ? (
-                            <div className="flex items-center gap-2 text-sm text-gray-500"><Spinner /> Chargement…</div>
+                            <div className="space-y-4">
+                                <Skeleton className="h-6 w-40" />
+                                <Skeleton className="h-9 w-full" />
+                                <Skeleton className="h-9 w-full" />
+                                <Skeleton className="h-9 w-full" />
+                                <Skeleton className="h-10 w-48" />
+                            </div>
                         ) : (
                             <form onSubmit={onSave} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -235,7 +242,12 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                     {profileLoading ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-500"><Spinner /> Chargement…</div>
+                        <div className="space-y-4">
+                            <Skeleton className="h-6 w-40" />
+                            <Skeleton className="h-9 w-full" />
+                            <Skeleton className="h-9 w-full" />
+                            <Skeleton className="h-9 w-full" />
+                        </div>
                     ) : (
                         <form onSubmit={(e) => { e.preventDefault(); }} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

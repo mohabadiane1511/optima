@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type InvoiceRow = {
     id: string;
@@ -38,6 +39,7 @@ export default function InvoicesListPage() {
     const windowByGranularity: Record<typeof granularity, number> = { daily: 7, weekly: 12, monthly: 12, yearly: 5 } as any;
 
     const [summary, setSummary] = useState<{ revenue: { date: string; total: number }[]; statuses: Record<string, number>; paymentMethods?: { method: string; total: number }[]; productMargins?: { productId: string; name: string | null; sku: string | null; revenue: number; cost: number; margin: number }[]; topProducts?: { productId: string; name: string | null; sku: string | null; qty: number; revenue: number }[]; granularity: string } | null>(null);
+    const [summaryLoading, setSummaryLoading] = useState(true);
 
     // Tooltip état
     const [tip, setTip] = useState<{ x: number; y: number; label: string; value: number } | null>(null);
@@ -81,11 +83,13 @@ export default function InvoicesListPage() {
     useEffect(() => {
         (async () => {
             try {
+                setSummaryLoading(true);
                 const window = windowByGranularity[granularity];
                 const res = await fetch(`/api/tenant/invoices/summary?granularity=${granularity}&window=${window}`, { cache: 'no-store' });
                 const data = await res.json();
                 if (res.ok) setSummary({ revenue: data.revenue || [], statuses: data.statuses || {}, paymentMethods: data.paymentMethods || [], productMargins: data.productMargins || [], topProducts: data.topProducts || [], granularity: data.granularity });
-            } catch { }
+            } catch { setSummary(null); }
+            finally { setSummaryLoading(false); }
         })();
     }, [granularity]);
 
@@ -115,7 +119,8 @@ export default function InvoicesListPage() {
 
     // Bar chart pour CA avec tooltip
     const RevenueChart = () => {
-        if (!summary || (summary.revenue || []).length === 0) return <div className="text-sm text-gray-500">Aucune donnée</div>;
+        if (!summary) return <Skeleton className="h-56 w-full" />;
+        if ((summary.revenue || []).length === 0) return <div className="text-sm text-gray-500">Aucune donnée</div>;
         const buckets = [...summary.revenue]
             .map(r => ({ x: new Date(r.date).getTime(), d: new Date(r.date), y: r.total }))
             .sort((a, b) => a.x - b.x);
@@ -201,7 +206,7 @@ export default function InvoicesListPage() {
     };
 
     const StatusDonut = () => {
-        if (!summary) return <div className="text-sm text-gray-500">Aucune donnée</div>;
+        if (!summary) return <Skeleton className="h-[180px] w-[180px]" />;
         const order: Array<keyof typeof summary.statuses> = ['paid', 'sent', 'overdue', 'draft', 'cancelled'] as any;
         const labelMap: Record<string, string> = { paid: 'Payée', sent: 'Émise', overdue: 'Échue', draft: 'Brouillon', cancelled: 'Annulée' };
         const colors: Record<string, string> = { paid: '#10b981', sent: '#6366f1', overdue: '#ef4444', draft: '#9ca3af', cancelled: '#6b7280' };
@@ -224,7 +229,8 @@ export default function InvoicesListPage() {
     };
 
     const PaymentMethodsDonut = () => {
-        if (!summary || !summary.paymentMethods) return <div className="text-sm text-gray-500">Aucune donnée</div>;
+        if (!summary) return <Skeleton className="h-[180px] w-[180px]" />;
+        if (!summary.paymentMethods) return <div className="text-sm text-gray-500">Aucune donnée</div>;
         const items = summary.paymentMethods.length ? summary.paymentMethods : [];
         const labelMap: Record<string, string> = { cash: 'Espèces', card: 'Carte', transfer: 'Virement', mobile: 'Mobile', other: 'Autre' };
         const colorPool = ['#0ea5e9', '#10b981', '#f59e0b', '#6366f1', '#ef4444', '#14b8a6', '#f43f5e'];
@@ -252,7 +258,8 @@ export default function InvoicesListPage() {
     };
 
     const ProductMarginsChart = () => {
-        if (!summary || !summary.productMargins || summary.productMargins.length === 0) return <div className="text-sm text-gray-500">Aucune donnée</div>;
+        if (!summary) return <Skeleton className="h-56 w-full" />;
+        if (!summary.productMargins || summary.productMargins.length === 0) return <div className="text-sm text-gray-500">Aucune donnée</div>;
         const items = [...summary.productMargins];
         const W = 640, H = 240, padL = 140, padR = 18, padT = 10, padB = 20;
         const plotW = W - padL - padR, plotH = H - padT - padB;
@@ -305,33 +312,50 @@ export default function InvoicesListPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Chiffre d'affaires</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{nf.format(summaryTotalPaid)} FCFA</div><CardDescription>Aligné sur le graphe ({granularity === 'monthly' ? '12 mois' : granularity === 'weekly' ? '12 semaines' : granularity === 'daily' ? '7 jours' : '5 ans'})</CardDescription></CardContent>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{summaryLoading ? <Skeleton className="h-6 w-24" /> : `${nf.format(summaryTotalPaid)} FCFA`}</div>
+                        <CardDescription>{summaryLoading ? <Skeleton className="h-3 w-40 mt-1" /> : `Aligné sur le graphe (${granularity === 'monthly' ? '12 mois' : granularity === 'weekly' ? '12 semaines' : granularity === 'daily' ? '7 jours' : '5 ans'})`}</CardDescription>
+                    </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Solde restant</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{nf.format(stats.totalSolde)} FCFA</div><CardDescription>Montant à encaisser</CardDescription></CardContent>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{loading ? <Skeleton className="h-6 w-24" /> : `${nf.format(stats.totalSolde)} FCFA`}</div>
+                        <CardDescription>{loading ? <Skeleton className="h-3 w-32 mt-1" /> : 'Montant à encaisser'}</CardDescription>
+                    </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Factures payées</CardTitle></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{stats.nbPayees}</div><CardDescription>Sur la sélection</CardDescription></CardContent>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{loading ? <Skeleton className="h-6 w-10" /> : stats.nbPayees}</div>
+                        <CardDescription>{loading ? <Skeleton className="h-3 w-28 mt-1" /> : 'Sur la sélection'}</CardDescription>
+                    </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm">Top 3 produits</CardTitle></CardHeader>
                     <CardContent>
-                        <div className="space-y-2 text-sm">
-                            {(summary?.topProducts || []).slice(0, 3).map((p, i) => (
-                                <div key={p.productId || i} className="flex items-center justify-between">
-                                    <div className="truncate max-w-[60%]" title={p.name || p.sku || p.productId || 'Produit'}>{p.name || p.sku || p.productId || 'Produit'}</div>
-                                    <div className="text-right">
-                                        <div className="font-medium">{nf.format(Number(p.revenue || 0))} FCFA</div>
-                                        <div className="text-gray-500">{nf.format(Number(p.qty || 0))} u.</div>
+                        {summaryLoading ? (
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-5/6" />
+                                <Skeleton className="h-4 w-4/6" />
+                            </div>
+                        ) : (
+                            <div className="space-y-2 text-sm">
+                                {(summary?.topProducts || []).slice(0, 3).map((p, i) => (
+                                    <div key={p.productId || i} className="flex items-center justify-between">
+                                        <div className="truncate max-w-[60%]" title={p.name || p.sku || p.productId || 'Produit'}>{p.name || p.sku || p.productId || 'Produit'}</div>
+                                        <div className="text-right">
+                                            <div className="font-medium">{nf.format(Number(p.revenue || 0))} FCFA</div>
+                                            <div className="text-gray-500">{nf.format(Number(p.qty || 0))} u.</div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
-                            {(!summary || (summary.topProducts || []).length === 0) && (
-                                <div className="text-gray-500">Aucune vente</div>
-                            )}
-                        </div>
+                                ))}
+                                {(!summary || (summary.topProducts || []).length === 0) && (
+                                    <div className="text-gray-500">Aucune vente</div>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -432,7 +456,15 @@ export default function InvoicesListPage() {
                             </TableHeader>
                             <TableBody>
                                 {loading ? (
-                                    <TableRow><TableCell colSpan={8} className="text-center text-sm text-gray-500">Chargement…</TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={8}>
+                                            <div className="space-y-2">
+                                                <Skeleton className="h-6 w-full" />
+                                                <Skeleton className="h-6 w-full" />
+                                                <Skeleton className="h-6 w-full" />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ) : error ? (
                                     <TableRow><TableCell colSpan={8} className="text-center text-sm text-red-600">{error}</TableCell></TableRow>
                                 ) : filtered.length === 0 ? (

@@ -22,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -401,7 +402,9 @@ export default function PurchasesRfqPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((r) => (
+                            {loading ? (
+                                <tr><td colSpan={6} className="py-4"><div className="space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-5 w-5/6" /><Skeleton className="h-5 w-4/6" /></div></td></tr>
+                            ) : filtered.map((r) => (
                                 <tr key={r.id} className="border-b hover:bg-gray-50">
                                     <td className="py-2">{r.number}</td>
                                     <td className="py-2">{r.suppliers.join(", ")}</td>
