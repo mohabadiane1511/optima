@@ -20,6 +20,7 @@ type Product = {
     sku: string;
     name: string;
     category: string;
+    categoryId?: string | null;
     salePrice: number;
     purchasePrice: number;
     stock: number;
@@ -44,6 +45,11 @@ export default function ProductsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [createOpen, setCreateOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
+    const [editProduct, setEditProduct] = useState<Product | null>(null);
+    const [editForm, setEditForm] = useState({ sku: "", name: "", salePrice: "", purchasePrice: "", categoryId: "" });
+    const [updating, setUpdating] = useState(false);
+    const [deleting, setDeleting] = useState<string | null>(null);
     const [form, setForm] = useState({ sku: "", name: "", salePrice: "", purchasePrice: "", categoryId: "" });
     const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
     const [catOpen, setCatOpen] = useState(false);
@@ -87,6 +93,7 @@ export default function ProductsPage() {
                 sku: p.sku,
                 name: p.name,
                 category: p.category?.name ?? '—',
+                categoryId: p.categoryId || null,
                 salePrice: Number(p.salePrice ?? 0),
                 purchasePrice: Number(p.purchasePrice ?? 0),
                 stock: Number(p.qtyOnHand ?? 0),
@@ -106,6 +113,16 @@ export default function ProductsPage() {
 
     // Charger au montage
     useEffect(() => { loadProducts(); }, []);
+    // Charger catégories une fois (pour création et édition)
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch('/api/tenant/categories', { cache: 'no-store' });
+                const data = await res.json();
+                setCategories(Array.isArray(data) ? data : []);
+            } catch { setCategories([]); }
+        })();
+    }, []);
     // Charger séries du chart selon granularité
     useEffect(() => {
         (async () => {
@@ -450,10 +467,35 @@ export default function ProductsPage() {
                                                                 setHistoryRows([]);
                                                             }
                                                         }}>Historique</DropdownMenuItem>
-                                                        <DropdownMenuItem>Modifier</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => {
+                                                            setEditProduct(p);
+                                                            setEditForm({ sku: p.sku, name: p.name, salePrice: String(p.salePrice ?? ''), purchasePrice: String(p.purchasePrice ?? ''), categoryId: p.categoryId || '' });
+                                                            setEditOpen(true);
+                                                        }}>Modifier</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => { setMoveProduct(p); setMoveType('IN'); setMoveQty(""); setMoveOpen(true); }}>Entrée stock</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => { setMoveProduct(p); setMoveType('OUT'); setMoveQty(""); setMoveOpen(true); }}>Sortie stock</DropdownMenuItem>
-                                                        <DropdownMenuItem className="text-red-600">Désactiver</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={async () => {
+                                                            try {
+                                                                const res = await fetch(`/api/tenant/products/${p.id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !p.active }) });
+                                                                const data = await res.json().catch(() => ({} as any));
+                                                                if (!res.ok) { toast.error(data?.error || 'Action impossible'); return; }
+                                                                await loadProducts();
+                                                                toast.success(p.active ? 'Produit désactivé' : 'Produit activé');
+                                                            } catch { toast.error('Erreur réseau'); }
+                                                        }}>{p.active ? 'Désactiver' : 'Activer'}</DropdownMenuItem>
+                                                        <DropdownMenuItem className={p.active ? 'text-gray-400 pointer-events-none' : 'text-red-600'} onClick={async () => {
+                                                            if (p.active) return;
+                                                            if (!confirm('Supprimer définitivement ce produit ?')) return;
+                                                            try {
+                                                                setDeleting(p.id);
+                                                                const res = await fetch(`/api/tenant/products/${p.id}`, { method: 'DELETE' });
+                                                                const data = await res.json().catch(() => ({} as any));
+                                                                if (!res.ok) { toast.error(data?.error || 'Suppression impossible'); return; }
+                                                                await loadProducts();
+                                                                toast.success('Produit supprimé');
+                                                            } catch { toast.error('Erreur réseau'); }
+                                                            finally { setDeleting(null); }
+                                                        }}>Supprimer</DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </TableCell>
@@ -510,6 +552,75 @@ export default function ProductsPage() {
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>Annuler</Button>
                             <Button type="submit" disabled={!canSubmit || creating}>{creating ? (<><Spinner className="mr-2" />Création…</>) : 'Créer'}</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog Édition */}
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogContent className="sm:max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>Modifier le produit</DialogTitle>
+                        <DialogDescription>Mettre à jour les informations du produit</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!editProduct) return;
+                        try {
+                            setUpdating(true);
+                            const payload: any = {
+                                sku: editForm.sku.trim(),
+                                name: editForm.name.trim(),
+                                purchasePrice: Number(editForm.purchasePrice || 0),
+                                salePrice: Number(editForm.salePrice || 0),
+                                unit: 'unité',
+                                categoryId: editForm.categoryId || null,
+                            };
+                            const res = await fetch(`/api/tenant/products/${editProduct.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                            const data = await res.json();
+                            if (!res.ok) { toast.error(data?.error || 'Mise à jour impossible'); return; }
+                            setEditOpen(false);
+                            setEditProduct(null);
+                            await loadProducts();
+                            toast.success('Produit mis à jour');
+                        } catch { toast.error('Erreur réseau'); }
+                        finally { setUpdating(false); }
+                    }} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-sm text-gray-600">SKU</label>
+                                <Input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} placeholder="PRD-0005" required />
+                            </div>
+                            <div className="space-y-2 md:col-span-1">
+                                <label className="text-sm text-gray-600">Nom</label>
+                                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nom du produit" required />
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-sm text-gray-600">Catégorie</label>
+                                <Select value={editForm.categoryId} onValueChange={(v) => setEditForm({ ...editForm, categoryId: v })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Sélectionner une catégorie (optionnel)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {categories.map((c) => (
+                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm text-gray-600">Prix vente</label>
+                                <Input type="number" inputMode="decimal" value={editForm.salePrice} onChange={(e) => setEditForm({ ...editForm, salePrice: e.target.value })} placeholder="0" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm text-gray-600">Prix achat</label>
+                                <Input type="number" inputMode="decimal" value={editForm.purchasePrice} onChange={(e) => setEditForm({ ...editForm, purchasePrice: e.target.value })} placeholder="0" />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={updating}>Annuler</Button>
+                            <Button type="submit" disabled={updating}>{updating ? (<><Spinner className="mr-2" />Mise à jour…</>) : 'Enregistrer'}</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

@@ -15,6 +15,7 @@ function serializeProduct(p: any, stockMap: Record<string, any>, categoryName?: 
     sku: p.sku,
     name: p.name,
     category: categoryName ? { name: categoryName } : null,
+    categoryId: p.categoryId || null,
     unit: p.unit,
     purchasePrice: Number(p.purchasePrice ?? 0),
     salePrice: Number(p.salePrice ?? 0),
