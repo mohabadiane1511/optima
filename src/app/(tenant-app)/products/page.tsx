@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Plus, MoreHorizontal, Package, Upload, Download, Filter, History, FileDown } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Product = {
     id: string;
@@ -58,6 +59,7 @@ export default function ProductsPage() {
     const [moving, setMoving] = useState(false);
     const [historyRows, setHistoryRows] = useState<{ id: string; type: string; qty: number; createdAt: string; createdBy: string | null; createdByName?: string | null; createdByEmail?: string | null; productName?: string | null; productSku?: string | null }[]>([]);
     const [recentMoves, setRecentMoves] = useState<typeof historyRows>([]);
+    const [recentMovesLoading, setRecentMovesLoading] = useState(true);
     const [exportOpen, setExportOpen] = useState(false);
     const [exportPreset, setExportPreset] = useState<'today' | 'last7' | 'thisMonth' | 'custom'>('last7');
     const [exportFrom, setExportFrom] = useState<string>('');
@@ -125,6 +127,7 @@ export default function ProductsPage() {
     useEffect(() => {
         (async () => {
             try {
+                setRecentMovesLoading(true);
                 const res = await fetch('/api/tenant/stock-movements?limit=5', { cache: 'no-store' });
                 const data = await res.json();
                 setRecentMoves((data || []).map((m: any) => ({
@@ -140,6 +143,8 @@ export default function ProductsPage() {
                 })));
             } catch {
                 setRecentMoves([]);
+            } finally {
+                setRecentMovesLoading(false);
             }
         })();
     }, []);
@@ -257,59 +262,63 @@ export default function ProductsPage() {
                             </div>
                         </div>
                         <div className="w-full h-56">
-                            <svg viewBox="0 0 100 56" className="w-full h-full">
-                                {(() => {
-                                    const maxVal = Math.max(1, ...series.map(s => Math.max(s.in, s.out)));
-                                    const n = Math.max(1, series.length);
-                                    const groupWidth = 100 / n; // largeur d'un groupe
-                                    const barWidth = Math.max(1.5, (groupWidth * 0.8) / 2); // deux barres par groupe
-                                    const yScale = (v: number) => 50 - (v / maxVal) * 45; // marge haute 6, basse 6
+                            {chartLoading || series.length === 0 ? (
+                                <Skeleton className="h-full w-full" />
+                            ) : (
+                                <svg viewBox="0 0 100 56" className="w-full h-full">
+                                    {(() => {
+                                        const maxVal = Math.max(1, ...series.map(s => Math.max(s.in, s.out)));
+                                        const n = Math.max(1, series.length);
+                                        const groupWidth = 100 / n; // largeur d'un groupe
+                                        const barWidth = Math.max(1.5, (groupWidth * 0.8) / 2); // deux barres par groupe
+                                        const yScale = (v: number) => 50 - (v / maxVal) * 45; // marge haute 6, basse 6
 
-                                    // Grille + ticks
-                                    const ticks = 5;
-                                    const grid: React.JSX.Element[] = [];
-                                    for (let i = 0; i <= ticks; i++) {
-                                        const y = 50 - (i / ticks) * 45;
-                                        const val = Math.round((i / ticks) * maxVal);
-                                        grid.push(
-                                            <g key={i}>
-                                                <line x1="0" y1={y} x2="100" y2={y} stroke="#e5e7eb" strokeWidth="0.2" />
-                                                <text x="0" y={y - 0.5} fontSize="2" fill="#9ca3af">{val}</text>
-                                            </g>
-                                        );
-                                    }
+                                        // Grille + ticks
+                                        const ticks = 5;
+                                        const grid: React.JSX.Element[] = [];
+                                        for (let i = 0; i <= ticks; i++) {
+                                            const y = 50 - (i / ticks) * 45;
+                                            const val = Math.round((i / ticks) * maxVal);
+                                            grid.push(
+                                                <g key={i}>
+                                                    <line x1="0" y1={y} x2="100" y2={y} stroke="#e5e7eb" strokeWidth="0.2" />
+                                                    <text x="0" y={y - 0.5} fontSize="2" fill="#9ca3af">{val}</text>
+                                                </g>
+                                            );
+                                        }
 
-                                    const bars = series.map((s, i) => {
-                                        const groupX = i * groupWidth + groupWidth / 2;
-                                        const inY = yScale(s.in);
-                                        const outY = yScale(s.out);
-                                        const baseY = 50;
+                                        const bars = series.map((s, i) => {
+                                            const groupX = i * groupWidth + groupWidth / 2;
+                                            const inY = yScale(s.in);
+                                            const outY = yScale(s.out);
+                                            const baseY = 50;
+                                            return (
+                                                <g key={i}>
+                                                    {/* IN (vert) */}
+                                                    <rect x={groupX - barWidth - 0.5} y={inY} width={barWidth} height={baseY - inY} fill="#10b981" fillOpacity="0.6">
+                                                        <title>{`${new Date(s.date).toLocaleDateString('fr-FR')}\nEntrées: ${s.in}`}</title>
+                                                    </rect>
+                                                    {/* OUT (bleu) */}
+                                                    <rect x={groupX + 0.5} y={outY} width={barWidth} height={baseY - outY} fill="#3b82f6" fillOpacity="0.6">
+                                                        <title>{`${new Date(s.date).toLocaleDateString('fr-FR')}\nSorties: ${s.out}`}</title>
+                                                    </rect>
+                                                    {/* Label X */}
+                                                    <text x={groupX} y={54} fontSize="2" textAnchor="middle" fill="#9ca3af">
+                                                        {granularity === 'monthly' ? MONTHS_LABELS[new Date(s.date).getMonth()] : new Date(s.date).toLocaleDateString('fr-FR')}
+                                                    </text>
+                                                </g>
+                                            );
+                                        });
+
                                         return (
-                                            <g key={i}>
-                                                {/* IN (vert) */}
-                                                <rect x={groupX - barWidth - 0.5} y={inY} width={barWidth} height={baseY - inY} fill="#10b981" fillOpacity="0.6">
-                                                    <title>{`${new Date(s.date).toLocaleDateString('fr-FR')}\nEntrées: ${s.in}`}</title>
-                                                </rect>
-                                                {/* OUT (bleu) */}
-                                                <rect x={groupX + 0.5} y={outY} width={barWidth} height={baseY - outY} fill="#3b82f6" fillOpacity="0.6">
-                                                    <title>{`${new Date(s.date).toLocaleDateString('fr-FR')}\nSorties: ${s.out}`}</title>
-                                                </rect>
-                                                {/* Label X */}
-                                                <text x={groupX} y={54} fontSize="2" textAnchor="middle" fill="#9ca3af">
-                                                    {granularity === 'monthly' ? MONTHS_LABELS[new Date(s.date).getMonth()] : new Date(s.date).toLocaleDateString('fr-FR')}
-                                                </text>
+                                            <g>
+                                                {grid}
+                                                {bars}
                                             </g>
                                         );
-                                    });
-
-                                    return (
-                                        <g>
-                                            {grid}
-                                            {bars}
-                                        </g>
-                                    );
-                                })()}
-                            </svg>
+                                    })()}
+                                </svg>
+                            )}
                         </div>
                         <div className="mt-3 flex gap-4 text-xs">
                             <span className="inline-flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Entrées</span>
@@ -324,7 +333,13 @@ export default function ProductsPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
-                            {recentMoves.length === 0 ? (
+                            {recentMovesLoading ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-4 w-full" />
+                                    <Skeleton className="h-4 w-5/6" />
+                                    <Skeleton className="h-4 w-4/6" />
+                                </div>
+                            ) : recentMoves.length === 0 ? (
                                 <div className="text-sm text-gray-500">Aucun mouvement récent</div>
                             ) : recentMoves.slice(0, 6).map((m) => (
                                 <div key={m.id} className="grid grid-cols-1 gap-1 text-sm">
@@ -383,7 +398,13 @@ export default function ProductsPage() {
                             </div>
                         </div>
                     ) : loading ? (
-                        <div className="py-8 text-sm text-gray-500">Chargement…</div>
+                        <div className="space-y-2">
+                            <Skeleton className="h-9 w-full" />
+                            <Skeleton className="h-9 w-full" />
+                            <Skeleton className="h-9 w-full" />
+                            <Skeleton className="h-9 w-full" />
+                            <Skeleton className="h-9 w-full" />
+                        </div>
                     ) : (
                         <div className="w-full overflow-x-auto">
                             <Table>

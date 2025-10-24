@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CldUploadWidget } from "next-cloudinary";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Inv = {
@@ -85,7 +86,17 @@ export default function SupplierInvoiceDetailPage() {
         run();
     }, [id]);
 
-    if (!inv) return <div className="p-6">{loading ? 'Chargement…' : 'Introuvable'}</div>;
+    if (!inv) return (
+        <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-8 w-48" />
+            </div>
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-64 w-full" />
+        </div>
+    );
 
     const postStatus = async (status: 'posted' | 'cancelled') => {
         try {

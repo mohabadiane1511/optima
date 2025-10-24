@@ -12,6 +12,7 @@ import { Plus, Trash, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Line = { productId?: string; name: string; sku?: string; qty: number; unit: string; price: number; tva: number };
 type ProductOption = { id: string; name: string; sku: string; salePrice: number; unit: string };
@@ -39,6 +40,7 @@ export default function NewInvoicePage() {
     const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
 
     // Charger produits pour le sélecteur
+    const [loadingData, setLoadingData] = useState(true);
     useEffect(() => {
         (async () => {
             try {
@@ -54,6 +56,7 @@ export default function NewInvoicePage() {
                 const dataC = await resC.json();
                 if (Array.isArray(dataC)) setCustomers(dataC);
             } catch { }
+            finally { setLoadingData(false); }
         })();
     }, []);
 
@@ -124,104 +127,114 @@ export default function NewInvoicePage() {
                         <CardDescription>Client, échéance et lignes</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Client</Label>
-                                <div className="flex gap-2">
-                                    <Select value={customerId || 'new'} onValueChange={(v) => {
-                                        if (v === 'new') { setCustomerId(''); setCustomer(''); }
-                                        else { setCustomerId(v); const c = customers.find(x => x.id === v); setCustomer(c?.name || ''); }
-                                    }}>
-                                        <SelectTrigger className="w-full"><SelectValue placeholder="Sélectionner client" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="new">— Nouveau client…</SelectItem>
-                                            {customers.map(c => (
-                                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button type="button" variant="outline" onClick={() => setCustomerDialogOpen(true)}>Nouveau</Button>
+                        {loadingData ? (
+                            <div className="space-y-4">
+                                <Skeleton className="h-9 w-full" />
+                                <Skeleton className="h-9 w-64" />
+                                <Skeleton className="h-40 w-full" />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Client</Label>
+                                        <div className="flex gap-2">
+                                            <Select value={customerId || 'new'} onValueChange={(v) => {
+                                                if (v === 'new') { setCustomerId(''); setCustomer(''); }
+                                                else { setCustomerId(v); const c = customers.find(x => x.id === v); setCustomer(c?.name || ''); }
+                                            }}>
+                                                <SelectTrigger className="w-full"><SelectValue placeholder="Sélectionner client" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="new">— Nouveau client…</SelectItem>
+                                                    {customers.map(c => (
+                                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button type="button" variant="outline" onClick={() => setCustomerDialogOpen(true)}>Nouveau</Button>
+                                        </div>
+                                        <Input className="mt-2" placeholder="Nom client (saisie libre)" value={customer} onChange={(e) => setCustomer(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Échéance</Label>
+                                        <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                                    </div>
                                 </div>
-                                <Input className="mt-2" placeholder="Nom client (saisie libre)" value={customer} onChange={(e) => setCustomer(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Échéance</Label>
-                                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                            </div>
-                        </div>
 
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div className="text-sm text-gray-600">Lignes</div>
-                                <Button variant="outline" size="sm" onClick={addLine}><Plus className="h-4 w-4 mr-2" />Ajouter une ligne</Button>
-                            </div>
-                            <div className="w-full overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="min-w-[280px]">Article</TableHead>
-                                            <TableHead className="min-w-[120px]">SKU</TableHead>
-                                            <TableHead className="text-right min-w-[90px]">Qté</TableHead>
-                                            <TableHead className="min-w-[120px]">Unité</TableHead>
-                                            <TableHead className="text-right min-w-[120px]">PU</TableHead>
-                                            <TableHead className="text-right min-w-[100px]">TVA %</TableHead>
-                                            <TableHead className="text-right min-w-[140px]">Montant</TableHead>
-                                            <TableHead></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {lines.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={8} className="text-center py-6 text-sm text-gray-500">
-                                                    Aucune ligne. Cliquez sur "Ajouter une ligne" pour commencer.
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : lines.map((l, idx) => (
-                                            <TableRow key={idx}>
-                                                <TableCell className="min-w-auto">
-                                                    <div className="flex gap-2">
-                                                        <Select value={l.productId || 'custom'} onValueChange={(val) => {
-                                                            if (val === 'custom') {
-                                                                setLines(p => p.map((x, i) => i === idx ? { ...x, productId: undefined } : x));
-                                                            } else {
-                                                                const prod = products.find(p => p.id === val);
-                                                                if (prod) {
-                                                                    setLines(p => p.map((x, i) => i === idx ? { ...x, productId: prod.id, name: prod.name, sku: prod.sku, price: prod.salePrice, unit: prod.unit } : x));
-                                                                }
-                                                            }
-                                                        }}>
-                                                            <SelectTrigger className="min-w-[200px] h-9"><SelectValue placeholder="Sélectionner un produit" /></SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="custom">Saisie libre…</SelectItem>
-                                                                {products.map(p => (
-                                                                    <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="min-w-[120px]"><Input className="h-9" value={l.sku || ''} placeholder="SKU" onChange={(e) => { const v = e.target.value; setLines(p => p.map((x, i) => i === idx ? { ...x, sku: v } : x)); }} disabled /></TableCell>
-                                                <TableCell className="text-right min-w-[90px]"><Input className="h-9" type="number" value={l.qty} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, qty: v } : x)); }} /></TableCell>
-                                                <TableCell className="min-w-[120px]">
-                                                    <Select value={l.unit} onValueChange={(v) => setLines(p => p.map((x, i) => i === idx ? { ...x, unit: v } : x))}>
-                                                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="unité">unité</SelectItem>
-                                                            <SelectItem value="kg">kg</SelectItem>
-                                                            <SelectItem value="L">L</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </TableCell>
-                                                <TableCell className="text-right min-w-[120px]"><Input className="h-9" type="number" value={l.price} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, price: v } : x)); }} disabled /></TableCell>
-                                                <TableCell className="text-right min-w-[100px]"><Input className="h-9" type="number" value={l.tva} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, tva: v } : x)); }} /></TableCell>
-                                                <TableCell className="text-right">{nf.format(l.qty * l.price * (1 + l.tva / 100))} FCFA</TableCell>
-                                                <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => removeLine(idx)}><Trash className="h-4 w-4" /></Button></TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-sm text-gray-600">Lignes</div>
+                                        <Button variant="outline" size="sm" onClick={addLine}><Plus className="h-4 w-4 mr-2" />Ajouter une ligne</Button>
+                                    </div>
+                                    <div className="w-full overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="min-w-[280px]">Article</TableHead>
+                                                    <TableHead className="min-w-[120px]">SKU</TableHead>
+                                                    <TableHead className="text-right min-w-[90px]">Qté</TableHead>
+                                                    <TableHead className="min-w-[120px]">Unité</TableHead>
+                                                    <TableHead className="text-right min-w-[120px]">PU</TableHead>
+                                                    <TableHead className="text-right min-w-[100px]">TVA %</TableHead>
+                                                    <TableHead className="text-right min-w-[140px]">Montant</TableHead>
+                                                    <TableHead></TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {lines.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={8} className="text-center py-6 text-sm text-gray-500">
+                                                            Aucune ligne. Cliquez sur "Ajouter une ligne" pour commencer.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : lines.map((l, idx) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell className="min-w-auto">
+                                                            <div className="flex gap-2">
+                                                                <Select value={l.productId || 'custom'} onValueChange={(val) => {
+                                                                    if (val === 'custom') {
+                                                                        setLines(p => p.map((x, i) => i === idx ? { ...x, productId: undefined } : x));
+                                                                    } else {
+                                                                        const prod = products.find(p => p.id === val);
+                                                                        if (prod) {
+                                                                            setLines(p => p.map((x, i) => i === idx ? { ...x, productId: prod.id, name: prod.name, sku: prod.sku, price: prod.salePrice, unit: prod.unit } : x));
+                                                                        }
+                                                                    }
+                                                                }}>
+                                                                    <SelectTrigger className="min-w-[200px] h-9"><SelectValue placeholder="Sélectionner un produit" /></SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="custom">Saisie libre…</SelectItem>
+                                                                        {products.map(p => (
+                                                                            <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="min-w-[120px]"><Input className="h-9" value={l.sku || ''} placeholder="SKU" onChange={(e) => { const v = e.target.value; setLines(p => p.map((x, i) => i === idx ? { ...x, sku: v } : x)); }} disabled /></TableCell>
+                                                        <TableCell className="text-right min-w-[90px]"><Input className="h-9" type="number" value={l.qty} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, qty: v } : x)); }} /></TableCell>
+                                                        <TableCell className="min-w-[120px]">
+                                                            <Select value={l.unit} onValueChange={(v) => setLines(p => p.map((x, i) => i === idx ? { ...x, unit: v } : x))}>
+                                                                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="unité">unité</SelectItem>
+                                                                    <SelectItem value="kg">kg</SelectItem>
+                                                                    <SelectItem value="L">L</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </TableCell>
+                                                        <TableCell className="text-right min-w-[120px]"><Input className="h-9" type="number" value={l.price} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, price: v } : x)); }} disabled /></TableCell>
+                                                        <TableCell className="text-right min-w-[100px]"><Input className="h-9" type="number" value={l.tva} onChange={(e) => { const v = Number(e.target.value || 0); setLines(p => p.map((x, i) => i === idx ? { ...x, tva: v } : x)); }} /></TableCell>
+                                                        <TableCell className="text-right">{nf.format(l.qty * l.price * (1 + l.tva / 100))} FCFA</TableCell>
+                                                        <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => removeLine(idx)}><Trash className="h-4 w-4" /></Button></TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -231,11 +244,19 @@ export default function NewInvoicePage() {
                         <CardDescription>Vérifiez les montants</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between"><span>Total HT</span><span className="font-medium">{nf.format(totals.ht)} FCFA</span></div>
-                            <div className="flex justify-between"><span>TVA</span><span className="font-medium">{nf.format(totals.tva)} FCFA</span></div>
-                            <div className="flex justify-between text-base font-semibold pt-2 border-t"><span>Total TTC</span><span>{nf.format(totals.ttc)} FCFA</span></div>
-                        </div>
+                        {loadingData ? (
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-5/6" />
+                                <Skeleton className="h-4 w-4/6" />
+                            </div>
+                        ) : (
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between"><span>Total HT</span><span className="font-medium">{nf.format(totals.ht)} FCFA</span></div>
+                                <div className="flex justify-between"><span>TVA</span><span className="font-medium">{nf.format(totals.tva)} FCFA</span></div>
+                                <div className="flex justify-between text-base font-semibold pt-2 border-t"><span>Total TTC</span><span>{nf.format(totals.ttc)} FCFA</span></div>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

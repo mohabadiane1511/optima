@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Invoice = {
     id: string;
@@ -142,7 +143,22 @@ export default function InvoiceDetailPage() {
         finally { setLoadingRecord(false); }
     }
 
-    if (loading) return <div className="p-6 text-sm text-gray-500">Chargement…</div>;
+    if (loading) return (
+        <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+                <Skeleton className="h-8 w-72" />
+                <div className="flex gap-2">
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-28" />
+                </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Skeleton className="h-64 w-full lg:col-span-2" />
+                <Skeleton className="h-40 w-full" />
+            </div>
+        </div>
+    );
     if (error || !inv) return <div className="p-6 text-sm text-red-600">{error || 'Facture introuvable'}</div>;
 
     return (

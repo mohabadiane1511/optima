@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 
 type Item = { id: string; number?: string | null; supplier?: string | null; status: string; invoiceDate: string; dueDate?: string | null; totalTTC: number };
@@ -71,7 +72,7 @@ export default function SupplierInvoicesPage() {
                         </Select>
                     </div>
                     <div className="flex-1 max-w-sm"><Input placeholder="Rechercher (numéro, fournisseur)" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-                    <div className="text-sm text-gray-500">{loading ? 'Chargement…' : ''}</div>
+                    <div className="text-sm text-gray-500">{loading ? <Skeleton className="h-4 w-24" /> : ''}</div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -88,7 +89,9 @@ export default function SupplierInvoicesPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {items.map((it) => (
+                            {loading ? (
+                                <tr><td colSpan={7} className="py-4"><div className="space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-5 w-5/6" /><Skeleton className="h-5 w-4/6" /></div></td></tr>
+                            ) : items.map((it) => (
                                 <tr key={it.id} className="border-b hover:bg-gray-50">
                                     <td className="py-2">{it.number || '—'}</td>
                                     <td className="py-2">{it.supplier || '—'}</td>

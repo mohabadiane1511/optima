@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type ReceiptDetail = {
     id: string;
@@ -49,7 +50,16 @@ export default function ReceiptDetailPage() {
         }), { ordered: 0, received: 0, remaining: 0 });
     }, [data]);
 
-    if (!data) return <div className="p-6">{loading ? "Chargement…" : "Introuvable"}</div>;
+    if (!data) return (
+        <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-8 w-32" />
+            </div>
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-64 w-full" />
+        </div>
+    );
 
     return (
         <div className="p-6 space-y-4">

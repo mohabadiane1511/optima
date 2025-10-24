@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Po = {
     id: string;
@@ -56,7 +57,16 @@ export default function PurchaseOrderDetailPage() {
         run();
     }, [id]);
 
-    if (!po) return <div className="p-6">Chargement…</div>;
+    if (!po) return (
+        <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-8 w-40" />
+            </div>
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-64 w-full" />
+        </div>
+    );
 
     const openSend = () => {
         if (!po) return;
