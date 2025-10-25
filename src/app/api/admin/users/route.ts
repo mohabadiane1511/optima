@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { getTenantPlanContext } from '@/lib/tenant/plan';
 
-const prisma = new PrismaClient();
-
+const db = prisma as any;
 // GET /api/admin/users - Liste tous les utilisateurs avec leurs tenants
 export async function GET() {
   try {
-    const users = await prisma.user.findMany({
+    const users = await db.user.findMany({
       include: {
         memberships: {
           include: {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const { email, name, password, tenantId, role = 'user' } = data;
 
     // Vérifier que l'email est unique
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { email },
     });
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Vérifier que le tenant existe
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await db.tenant.findUnique({
       where: { id: tenantId },
     });
 
@@ -66,12 +66,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Vérifier quota: nombre de membres actifs vs maxUsers
+    const planCtx = await getTenantPlanContext(tenantId);
+    if (planCtx?.maxUsers != null && planCtx.activeUsers >= planCtx.maxUsers) {
+      return NextResponse.json(
+        { error: 'Quota utilisateurs atteint pour ce plan' },
+        { status: 400 }
+      );
+    }
+
     // Hasher le mot de passe
     const bcrypt = require('bcryptjs');
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Créer l'utilisateur
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
         email,
         name,
@@ -80,7 +89,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Créer le membership
-    const membership = await prisma.membership.create({
+    const membership = await db.membership.create({
       data: {
         userId: user.id,
         tenantId: tenantId,
@@ -89,7 +98,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Récupérer l'utilisateur avec ses informations complètes
-    const userWithMemberships = await prisma.user.findUnique({
+    const userWithMemberships = await db.user.findUnique({
       where: { id: user.id },
       include: {
         memberships: {

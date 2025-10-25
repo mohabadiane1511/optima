@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 // Fonction pour générer un mot de passe temporaire
 function generateTempPassword() {
@@ -19,7 +19,7 @@ function generateTempPassword() {
 // GET /api/admin/tenants - Liste tous les tenants
 export async function GET() {
   try {
-    const tenants = await prisma.tenant.findMany({
+    const tenants = await db.tenant.findMany({
       include: {
         _count: {
           select: {
@@ -27,6 +27,7 @@ export async function GET() {
             domains: true,
           },
         },
+        plan: { select: { code: true, name: true } }
       },
       orderBy: {
         createdAt: 'desc',
@@ -57,11 +58,13 @@ export async function POST(request: NextRequest) {
       ninea,
       address,
       website,
-      logoUrl
+      logoUrl,
+      planId,
+      planCode
     } = data;
 
     // Vérifier que le slug est unique
-    const existingTenant = await prisma.tenant.findUnique({
+    const existingTenant = await db.tenant.findUnique({
       where: { slug },
     });
 
@@ -80,12 +83,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Résoudre le plan (obligatoire). Si rien fourni, fallback ESSENTIEL
+    const planWhere: any = planId
+      ? { id: planId }
+      : planCode
+        ? { code: planCode }
+        : { code: 'ESSENTIEL' };
+
+    const plan = await db.plan.findUnique({ where: planWhere });
+    if (!plan) {
+      return NextResponse.json(
+        { error: 'Plan invalide ou introuvable' },
+        { status: 400 }
+      );
+    }
+
     // Générer un mot de passe temporaire pour l'admin
     const tempPassword = generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, 12);
 
-    // Utiliser une transaction pour créer le tenant et l'admin
-    const result = await prisma.$transaction(async (tx) => {
+    // Utiliser une transaction pour créer le tenant (avec snapshot de plan) et l'admin
+    const result = await db.$transaction(async (tx: any) => {
       // 1. Créer le tenant
       const tenant = await tx.tenant.create({
         data: {
@@ -100,6 +118,10 @@ export async function POST(request: NextRequest) {
           website,
           logoUrl,
           status: 'active',
+          planId: plan.id,
+          planCode: plan.code,
+          maxUsers: plan.includedUsers,
+          allowedModules: plan.modules,
         },
       });
 
@@ -129,6 +151,12 @@ export async function POST(request: NextRequest) {
         },
         adminEmail: user.email,
         tempPassword,
+        plan: {
+          id: plan.id,
+          code: plan.code,
+          includedUsers: plan.includedUsers,
+          modules: plan.modules,
+        }
       };
     });
 

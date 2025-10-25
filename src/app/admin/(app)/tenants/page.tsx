@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TenantDialog } from '../../tenants/components/TenantDialog';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { Minus, Plus as PlusIcon } from 'lucide-react';
 
 interface Tenant {
     id: string;
@@ -35,6 +37,8 @@ interface Tenant {
     status: 'active' | 'inactive';
     createdAt: Date;
     updatedAt: Date;
+    maxUsers?: number | null;
+    plan?: { code: string; name: string } | null;
     _count: {
         memberships: number;
         domains: number;
@@ -78,6 +82,7 @@ export default function TenantsPage() {
 
     const handleTenantSaved = () => {
         loadTenants();
+        toast.success(selectedTenant ? 'Entreprise modifiée' : 'Entreprise créée');
     };
 
     const handleDeactivateTenant = async (tenantId: string) => {
@@ -89,12 +94,13 @@ export default function TenantsPage() {
 
                 if (response.ok) {
                     loadTenants();
+                    toast.success('Entreprise désactivée');
                 } else {
                     const data = await response.json();
-                    alert(data.error || 'Erreur lors de la désactivation');
+                    toast.error(data.error || 'Erreur lors de la désactivation');
                 }
             } catch (error) {
-                alert('Erreur lors de la désactivation');
+                toast.error('Erreur lors de la désactivation');
             }
         }
     };
@@ -107,12 +113,13 @@ export default function TenantsPage() {
 
             if (response.ok) {
                 loadTenants();
+                toast.success('Entreprise réactivée');
             } else {
                 const data = await response.json();
-                alert(data.error || 'Erreur lors de la réactivation');
+                toast.error(data.error || 'Erreur lors de la réactivation');
             }
         } catch (error) {
-            alert('Erreur lors de la réactivation');
+            toast.error('Erreur lors de la réactivation');
         }
     };
 
@@ -125,12 +132,13 @@ export default function TenantsPage() {
 
                 if (response.ok) {
                     loadTenants();
+                    toast.success('Entreprise supprimée définitivement');
                 } else {
                     const data = await response.json();
-                    alert(data.error || 'Erreur lors de la suppression définitive');
+                    toast.error(data.error || 'Erreur lors de la suppression définitive');
                 }
             } catch (error) {
-                alert('Erreur lors de la suppression définitive');
+                toast.error('Erreur lors de la suppression définitive');
             }
         }
     };
@@ -264,7 +272,13 @@ export default function TenantsPage() {
                                             </div>
                                             <div className="text-xs text-gray-500 mt-1">
                                                 {tenant._count.memberships} utilisateur{tenant._count.memberships > 1 ? 's' : ''}
+                                                {typeof tenant.maxUsers === 'number' && (
+                                                    <> — capacité {tenant.maxUsers}</>
+                                                )}
                                             </div>
+                                            {tenant.plan?.code && (
+                                                <div className="text-xs text-gray-400">Plan: {tenant.plan.code}</div>
+                                            )}
                                         </div>
 
                                         <DropdownMenu>
@@ -274,9 +288,40 @@ export default function TenantsPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={async () => {
+                                                    try {
+                                                        const res = await fetch(`/api/admin/tenants/${tenant.id}/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delta: 1 }) });
+                                                        const data = await res.json();
+                                                        if (!res.ok) throw new Error(data?.error || 'Erreur capacité');
+                                                        toast.success('Capacité augmentée à ' + data.maxUsers);
+                                                    } catch (e: any) { toast.error(e?.message || 'Erreur'); }
+                                                }}>
+                                                    <PlusIcon className="mr-2 h-4 w-4" />Augmenter capacité (+1)
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={async () => {
+                                                    try {
+                                                        const res = await fetch(`/api/admin/tenants/${tenant.id}/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delta: -1 }) });
+                                                        const data = await res.json();
+                                                        if (!res.ok) throw new Error(data?.error || 'Action refusée: ' + (data?.error || ''));
+                                                        toast.success('Capacité réduite à ' + data.maxUsers);
+                                                    } catch (e: any) { toast.error(e?.message || 'Erreur'); }
+                                                }}>
+                                                    <Minus className="mr-2 h-4 w-4" />Réduire capacité (−1)
+                                                </DropdownMenuItem>
                                                 <DropdownMenuItem>
                                                     <Eye className="mr-2 h-4 w-4" />
                                                     Voir détails
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={async () => {
+                                                    try {
+                                                        const res = await fetch(`/api/admin/tenants/${tenant.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reapplyPlan' }) });
+                                                        const data = await res.json();
+                                                        if (!res.ok) throw new Error(data?.error || 'Erreur réapplication');
+                                                        toast.success('Plan réappliqué');
+                                                        loadTenants();
+                                                    } catch (e: any) { toast.error(e?.message || 'Erreur'); }
+                                                }}>
+                                                    <Edit className="mr-2 h-4 w-4" />Réappliquer le plan
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEditTenant(tenant)}>
                                                     <Edit className="mr-2 h-4 w-4" />

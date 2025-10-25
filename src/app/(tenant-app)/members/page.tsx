@@ -25,6 +25,8 @@ export default function MembersPage() {
     const [roleFilter, setRoleFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string>('');
     const [me, setMe] = useState<{ role: string | null; userId: string | null }>({ role: null, userId: null });
+    const [maxUsers, setMaxUsers] = useState<number | null>(null);
+    const [activeUsers, setActiveUsers] = useState<number>(0);
 
     async function load() {
         setLoading(true);
@@ -56,16 +58,35 @@ export default function MembersPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [q]);
 
-    // Charger mon identité (pour masquer mes propres actions si admin)
+    // Charger mon identité (pour masquer mes propres actions si admin) + contexte plan/quotas
     useEffect(() => {
         (async () => {
-            try { const res = await fetch('/api/tenant/me', { cache: 'no-store' }); const data = await res.json(); setMe({ role: data?.role || null, userId: data?.userId || null }); } catch { }
+            try {
+                const res = await fetch('/api/tenant/me', { cache: 'no-store' });
+                const data = await res.json();
+                setMe({ role: data?.role || null, userId: data?.userId || null });
+                setMaxUsers(typeof data?.maxUsers === 'number' ? data.maxUsers : null);
+            } catch { }
+            // Compter les utilisateurs actifs (sans pagination)
+            try {
+                const res = await fetch('/api/tenant/members?status=active&limit=1', { cache: 'no-store' });
+                const data = await res.json();
+                if (res.ok && typeof data?.pagination?.total === 'number') {
+                    setActiveUsers(data.pagination.total);
+                }
+            } catch { }
         })();
     }, []);
 
     const filtered = useMemo(() => items, [items]);
 
+    const atQuota = maxUsers != null && activeUsers >= maxUsers;
+
     function openCreate() {
+        if (atQuota) {
+            toast.error("Quota d'utilisateurs atteint pour ce plan");
+            return;
+        }
         setEditing(null);
         setForm({ name: '', email: '', role: 'viewer' });
         setDialogOpen(true);
@@ -125,8 +146,13 @@ export default function MembersPage() {
                                 <SelectItem value="init">À initialiser</SelectItem>
                             </SelectContent>
                         </Select>
-                        <div className="ml-auto">
-                            <Button onClick={openCreate}><Plus className="h-4 w-4" />Créer</Button>
+                        <div className="ml-auto flex items-center gap-3">
+                            {maxUsers != null && (
+                                <span className="text-xs text-gray-500">Utilisateurs: {activeUsers} / {maxUsers}</span>
+                            )}
+                            <Button onClick={openCreate} disabled={atQuota} title={atQuota ? "Quota atteint" : undefined}>
+                                <Plus className="h-4 w-4" />Créer
+                            </Button>
                         </div>
                     </div>
 
