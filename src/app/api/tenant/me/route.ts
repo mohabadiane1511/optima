@@ -20,10 +20,26 @@ export async function GET(request: NextRequest) {
         tenantId = t?.id || null;
       }
     }
-    if (!tenantId || !userId) return NextResponse.json({ role: null, userId: null }, { status: 200 });
+    if (!tenantId) return NextResponse.json({ role: null, userId: null }, { status: 200 });
     const db = prisma as any;
-    const membership = await db.membership.findFirst({ where: { tenantId, userId }, select: { role: true } });
-    return NextResponse.json({ role: membership?.role || null, userId });
+    const [membership, tenant] = await Promise.all([
+      userId ? db.membership.findFirst({ where: { tenantId, userId }, select: { role: true } }) : Promise.resolve(null),
+      db.tenant.findUnique({ where: { id: tenantId }, select: { allowedModules: true, maxUsers: true, planId: true, planCode: true } })
+    ]);
+
+    let allowedModules: string[] = Array.isArray(tenant?.allowedModules) ? tenant!.allowedModules : [];
+    let maxUsers: number | null = tenant?.maxUsers ?? null;
+
+    // Fallback uniquement si snapshot vide (pas d'union avec le plan)
+    if ((allowedModules.length === 0 || maxUsers == null)) {
+      const fallbackPlan = tenant?.planId
+        ? await db.plan.findUnique({ where: { id: tenant.planId } })
+        : await db.plan.findUnique({ where: { code: 'ESSENTIEL' } });
+      if (allowedModules.length === 0) allowedModules = (fallbackPlan?.modules as any) || ['dashboard', 'produits_stocks', 'ventes'];
+      if (maxUsers == null) maxUsers = (fallbackPlan as any)?.includedUsers ?? 1;
+    }
+
+    return NextResponse.json({ role: membership?.role || null, userId: userId || null, allowedModules, maxUsers });
   } catch (e) {
     return NextResponse.json({ role: null, userId: null }, { status: 200 });
   }

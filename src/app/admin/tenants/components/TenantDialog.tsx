@@ -69,10 +69,28 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
     // ID stable pour le conteneur inline du widget Cloudinary
     const inlineContainerIdRef = useRef<string>('cld-widget-' + Math.random().toString(36).slice(2));
 
+    // Plans (sélection du plan à la création/modification)
+    type Plan = { id: string; code: string; name: string; includedUsers: number; modules: string[] };
+    const [plans, setPlans] = useState<Plan[]>([]);
+    const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+
     // Réinitialiser le formulaire quand le dialog s'ouvre
     useEffect(() => {
         console.log('[TenantDialog] onOpenChange', { open });
         if (open) {
+            // Charger la liste des plans pour la sélection
+            (async () => {
+                try {
+                    const res = await fetch('/api/admin/plans', { cache: 'no-store' });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setPlans(Array.isArray(data) ? data : []);
+                        if (!tenant && Array.isArray(data) && data.length) {
+                            setSelectedPlanId(data[0].id);
+                        }
+                    }
+                } catch { }
+            })();
             if (tenant) {
                 // S'assurer que toutes les valeurs sont des chaînes vides au lieu de null
                 setFormData({
@@ -87,6 +105,18 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
                     logoUrl: tenant.logoUrl || '',
                 });
                 setLogoPreview(tenant.logoUrl || '');
+                // Récupérer planId courant si possible
+                if (tenant.id) {
+                    (async () => {
+                        try {
+                            const res = await fetch(`/api/admin/tenants/${tenant.id}`);
+                            if (res.ok) {
+                                const t = await res.json();
+                                if (t?.planId) setSelectedPlanId(t.planId);
+                            }
+                        } catch { }
+                    })();
+                }
             } else {
                 setFormData({
                     name: '',
@@ -216,12 +246,15 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
             const url = tenant ? `/api/admin/tenants/${tenant.id}` : '/api/admin/tenants';
             const method = tenant ? 'PUT' : 'POST';
 
+            const payload: any = { ...formData };
+            if (selectedPlanId) payload.planId = selectedPlanId;
+
             const response = await fetch(url, {
                 method,
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
 
             if (response.ok) {
@@ -328,6 +361,21 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
                                 onChange={(e) => setFormData(prev => ({ ...prev, contactPhone: e.target.value }))}
                                 placeholder="+221 XX XXX XX XX"
                             />
+                        </div>
+
+                        <div className="space-y-2 col-span-2">
+                            <Label>Plan</Label>
+                            <Select value={selectedPlanId} onValueChange={(v) => setSelectedPlanId(v)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Sélectionner un plan" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {plans.map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name} — {p.includedUsers} utilisateurs</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-gray-500">Modules: {(plans.find(p => p.id === selectedPlanId)?.modules || []).join(', ')}</p>
                         </div>
                     </div>
 

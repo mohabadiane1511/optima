@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { resolveTenantFromHost } from '@/lib/tenant/host';
 import { logAuditEvent } from '@/lib/audit';
+import { getTenantPlanContext } from '@/lib/tenant/plan';
 import { sendMail } from '@/lib/mailer';
 
 const db = prisma as any;
@@ -104,6 +105,12 @@ export async function POST(request: NextRequest) {
     // Forcer le rôle 'viewer' pour les créations par admin tenant
     const role = 'viewer';
     if (!email) return NextResponse.json({ error: 'Email requis' }, { status: 400 });
+
+    // Vérifier quota avant toute création
+    const planCtx = await getTenantPlanContext(tenantId);
+    if (planCtx?.maxUsers != null && planCtx.activeUsers >= planCtx.maxUsers) {
+      return NextResponse.json({ error: 'Quota utilisateurs atteint pour ce plan' }, { status: 400 });
+    }
 
     // Trouver ou créer l'utilisateur
     let user = await db.user.findUnique({ where: { email } });

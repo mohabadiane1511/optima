@@ -2,7 +2,12 @@ import React from 'react';
 import { TenantTopbar } from '../(tenant)/components/TenantTopbar';
 import { TenantSidebar } from '../(tenant)/components/TenantSidebar';
 import { Toaster } from '@/components/ui/sonner';
+import { Metadata } from 'next';
 
+export const metadata: Metadata = {
+    title: "Optima - Logiciel de gestion d'entreprise",
+    description: "Optima est un logiciel de gestion d'entreprise qui permet degérer les opérations de l'entreprise."
+}
 export default function TenantAppLayout({ children }: { children: React.ReactNode }) {
     return (
         <div className="h-screen bg-gray-50 flex flex-col">

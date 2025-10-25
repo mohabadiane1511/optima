@@ -21,11 +21,18 @@ model Tenant {
   website            String? // Site web
   logoUrl            String? // URL du logo
   status       String   @default("active") // 'active' | 'inactive'
+// Plan & limitations (snapshot au niveau du tenant)
+  planId       String?
+  planCode     String?
+  maxUsers     Int?
+  allowedModules String[] @default([])
+  overLimit    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   memberships  Membership[]
   domains      Domain[]
   auditLogs    AuditLog[]
+  plan         Plan?    @relation(fields: [planId], references: [id])
 }
 
 model User {
@@ -225,6 +232,24 @@ model AuditLog {
   @@index([tenantId, action, createdAt])
   @@index([tenantId, entity, entityId, createdAt])
   @@index([requestId])
+}
+
+// Plans tarifaires (Option A)
+model Plan {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  priceMonthlyFCFA  Decimal @db.Decimal(12,2)
+  priceYearlyFCFA   Decimal @db.Decimal(12,2)
+  includedUsers     Int
+  extraUserCreationFeeFCFA Decimal @db.Decimal(12,2)
+  extraUserMonthlyFeeFCFA  Decimal @db.Decimal(12,2)
+  modules  String[]
+  quotas   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenants  Tenant[]
 }
 
 

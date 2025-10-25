@@ -56,7 +56,8 @@ export async function PUT(
       address,
       website,
       logoUrl,
-      status 
+      status,
+      planId
     } = data;
 
     // Vérifier que le slug est unique (sauf pour le tenant actuel)
@@ -76,6 +77,21 @@ export async function PUT(
       }
     }
 
+    // Appliquer snapshot plan si planId fourni
+    let planUpdate: any = {};
+    if (planId) {
+      const plan = await db.plan.findUnique({ where: { id: planId } });
+      if (!plan) {
+        return NextResponse.json({ error: 'Plan invalide' }, { status: 400 });
+      }
+      planUpdate = {
+        planId: plan.id,
+        planCode: plan.code,
+        maxUsers: plan.includedUsers,
+        allowedModules: plan.modules,
+      };
+    }
+
     // Mettre à jour le tenant
     const tenant = await db.tenant.update({
       where: { id: params.id },
@@ -91,6 +107,7 @@ export async function PUT(
         website,
         logoUrl,
         status,
+        ...planUpdate,
       },
       include: {
         _count: {
@@ -152,25 +169,35 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Réactiver le tenant
-    const tenant = await db.tenant.update({
-      where: { id: params.id },
-      data: { status: 'active' },
-      include: {
-        _count: {
-          select: {
-            memberships: true,
-            domains: true,
+    const body = await (async () => { try { return await request.json(); } catch { return {}; } })();
+    if (body?.action === 'reapplyPlan') {
+      const t = await db.tenant.findUnique({ where: { id: params.id }, select: { planId: true } });
+      if (!t?.planId) return NextResponse.json({ error: 'Aucun plan associé' }, { status: 400 });
+      const plan = await db.plan.findUnique({ where: { id: t.planId } });
+      if (!plan) return NextResponse.json({ error: 'Plan introuvable' }, { status: 404 });
+      const tenant = await db.tenant.update({ where: { id: params.id }, data: { allowedModules: plan.modules, maxUsers: plan.includedUsers } });
+      return NextResponse.json({ success: true, tenant });
+    } else {
+      // Réactiver le tenant
+      const tenant = await db.tenant.update({
+        where: { id: params.id },
+        data: { status: 'active' },
+        include: {
+          _count: {
+            select: {
+              memberships: true,
+              domains: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Tenant réactivé avec succès',
-      tenant 
-    });
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Tenant réactivé avec succès',
+        tenant 
+      });
+    }
   } catch (error) {
     console.error('Erreur lors de la réactivation du tenant:', error);
     return NextResponse.json(

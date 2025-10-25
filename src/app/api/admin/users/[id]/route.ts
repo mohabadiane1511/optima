@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
+const db = prisma as any;
 
 // GET /api/admin/users/[id] - Récupérer un utilisateur spécifique
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: params.id },
       include: {
         memberships: {
@@ -54,7 +54,7 @@ export async function PUT(
     const { name, email, password, role, tenantId } = data;
 
     // Vérifier que l'utilisateur existe
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { id: params.id },
     });
 
@@ -67,7 +67,7 @@ export async function PUT(
 
     // Vérifier que l'email est unique (sauf pour l'utilisateur actuel)
     if (email && email !== existingUser.email) {
-      const emailExists = await prisma.user.findFirst({
+      const emailExists = await db.user.findFirst({
         where: {
           email,
           id: { not: params.id },
@@ -92,19 +92,19 @@ export async function PUT(
     }
 
     // Mettre à jour l'utilisateur
-    const user = await prisma.user.update({
+    const user = await db.user.update({
       where: { id: params.id },
       data: updateData,
     });
 
     // Mettre à jour le membership si nécessaire
     if (role || tenantId) {
-      const membership = await prisma.membership.findFirst({
+      const membership = await db.membership.findFirst({
         where: { userId: params.id },
       });
 
       if (membership) {
-        await prisma.membership.update({
+        await db.membership.update({
           where: { id: membership.id },
           data: {
             ...(role && { role }),
@@ -115,7 +115,7 @@ export async function PUT(
     }
 
     // Récupérer l'utilisateur avec ses informations complètes
-    const userWithMemberships = await prisma.user.findUnique({
+    const userWithMemberships = await db.user.findUnique({
       where: { id: params.id },
       include: {
         memberships: {
@@ -150,7 +150,7 @@ export async function DELETE(
 ) {
   try {
     // Vérifier que l'utilisateur existe
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: params.id },
       include: {
         memberships: {
@@ -171,7 +171,7 @@ export async function DELETE(
     // Vérifier s'il est le seul owner d'un tenant
     for (const membership of user.memberships) {
       if (membership.role === 'owner') {
-        const otherOwners = await prisma.membership.count({
+        const otherOwners = await db.membership.count({
           where: {
             tenantId: membership.tenantId,
             role: 'owner',
@@ -189,7 +189,7 @@ export async function DELETE(
     }
 
     // Supprimer les memberships d'abord
-    await prisma.membership.deleteMany({
+    await db.membership.deleteMany({
       where: { userId: params.id },
     });
 

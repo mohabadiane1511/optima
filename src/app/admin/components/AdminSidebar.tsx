@@ -31,6 +31,11 @@ const navigation = [
         icon: Users,
     },
     {
+        name: 'Plans',
+        href: '/admin/plans',
+        icon: Settings,
+    },
+    {
         name: 'Rapports',
         href: '/admin/reports',
         icon: BarChart3,
