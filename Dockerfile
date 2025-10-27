@@ -13,8 +13,11 @@ COPY package.json package-lock.json* ./
 # Install deps (cached)
 RUN npm ci --no-audit --no-fund
 
-# Copy rest of the source
+# Copy rest of the source (incl. prisma/schema.prisma)
 COPY . .
+
+# Generate Prisma client (after sources are copied)
+RUN npx prisma generate || true
 
 # Build (for prod images). Dev will use bind mount with next dev.
 RUN npm run build || true

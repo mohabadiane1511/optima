@@ -57,7 +57,8 @@ export async function PUT(
       website,
       logoUrl,
       status,
-      planId
+      planId,
+      billingFrequency
     } = data;
 
     // Vérifier que le slug est unique (sauf pour le tenant actuel)
@@ -92,6 +93,38 @@ export async function PUT(
       };
     }
 
+    // Recalcul nextInvoiceAt si la fréquence change
+    let billingUpdate: any = {};
+    if (billingFrequency) {
+      const current = await db.tenant.findUnique({ where: { id: params.id }, select: { createdAt: true, billingFrequency: true } });
+      if (current) {
+        const createdAt: Date = new Date(current.createdAt);
+        const anchorDay = createdAt.getDate();
+        const anchorMonth = createdAt.getMonth() + 1; // 1..12
+        const now = new Date();
+
+        const next = new Date(now);
+        if (billingFrequency === 'annual') {
+          // prochaine occurrence du jour/mois anniversaire à partir de maintenant
+          next.setMonth(anchorMonth - 1);
+          next.setDate(Math.min(anchorDay, new Date(next.getFullYear(), anchorMonth, 0).getDate()));
+          if (next <= now) next.setFullYear(next.getFullYear() + 1);
+        } else {
+          // mensuelle: mois suivant, même jour (fallback fin de mois)
+          next.setMonth(now.getMonth() + 1);
+          const lastDayNextMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+          next.setDate(Math.min(anchorDay, lastDayNextMonth));
+        }
+
+        billingUpdate = {
+          billingFrequency,
+          billingAnchorDay: anchorDay,
+          billingAnchorMonth: anchorMonth,
+          nextInvoiceAt: next,
+        };
+      }
+    }
+
     // Mettre à jour le tenant
     const tenant = await db.tenant.update({
       where: { id: params.id },
@@ -108,6 +141,7 @@ export async function PUT(
         logoUrl,
         status,
         ...planUpdate,
+        ...billingUpdate,
       },
       include: {
         _count: {
