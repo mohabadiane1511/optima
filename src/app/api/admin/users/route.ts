@@ -7,6 +7,13 @@ const db = prisma as any;
 export async function GET() {
   try {
     const users = await db.user.findMany({
+      where: {
+        memberships: {
+          some: {
+            role: { in: ['admin', 'owner'] }
+          }
+        }
+      },
       include: {
         memberships: {
           include: {

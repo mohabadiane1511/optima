@@ -11,7 +11,10 @@ import {
     Settings,
     BarChart3,
     FileText,
-    Shield
+    Shield,
+    Check,
+    CheckCircle,
+    CreditCard
 } from 'lucide-react';
 
 const navigation = [
@@ -33,7 +36,12 @@ const navigation = [
     {
         name: 'Plans',
         href: '/admin/plans',
-        icon: Settings,
+        icon: CheckCircle,
+    },
+    {
+        name: 'Facturation',
+        href: '/admin/billing',
+        icon: CreditCard,
     },
     {
         name: 'Rapports',
