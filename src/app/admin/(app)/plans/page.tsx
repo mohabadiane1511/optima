@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PencilIcon, Trash2Icon } from 'lucide-react';
 
 type Plan = {
     id: string;
@@ -125,7 +126,7 @@ export default function AdminPlansPage() {
                                         <TableCell>{Number(p.extraUserMonthlyFeeFCFA).toLocaleString()} FCFA</TableCell>
                                         <TableCell className="text-xs">{(p.modules || []).join(', ')}</TableCell>
                                         <TableCell className="text-right space-x-2">
-                                            <Button variant="outline" onClick={() => openEdit(p)}>Modifier</Button>
+                                            <Button variant="outline" onClick={() => openEdit(p)}><PencilIcon className="w-2 h-2"/></Button>
                                             <Button variant="destructive" onClick={async () => {
                                                 if (!confirm('Supprimer ce plan ?')) return;
                                                 try {
@@ -134,7 +135,7 @@ export default function AdminPlansPage() {
                                                     toast.success('Plan supprimé');
                                                     const all = await fetch('/api/admin/plans'); setPlans(await all.json());
                                                 } catch (e: any) { toast.error(e?.message || 'Erreur'); }
-                                            }}>Supprimer</Button>
+                                            }}><Trash2Icon className="w-2 h-2"/></Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
