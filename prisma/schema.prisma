@@ -27,12 +27,23 @@ model Tenant {
   maxUsers     Int?
   allowedModules String[] @default([])
   overLimit    Boolean  @default(false)
+  // Facturation (auto)
+  billingFrequency   String   @default("monthly") // 'monthly' | 'annual'
+  billingAnchorDay   Int?
+  billingAnchorMonth Int?
+  dueDays            Int      @default(15)
+  autoBillingEnabled Boolean  @default(true)
+  nextInvoiceAt      DateTime?
+  lastInvoicedPeriod String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   memberships  Membership[]
   domains      Domain[]
   auditLogs    AuditLog[]
   plan         Plan?    @relation(fields: [planId], references: [id])
+  billingInvoices BillingInvoice[]
+
+  @@index([autoBillingEnabled, nextInvoiceAt])
 }
 
 model User {
@@ -250,6 +261,36 @@ model Plan {
   updatedAt DateTime @updatedAt
 
   tenants  Tenant[]
+}
+
+// Factures d'abonnement (snapshot des montants et du plan au moment d'émission)
+model BillingInvoice {
+  id           String   @id @default(cuid())
+  tenantId     String
+  period       String   // 'AAAA-MM' (mensuel) ou 'AAAA' (annuel)
+  frequency    String   // 'monthly' | 'annual'
+  planCode     String
+  planName     String
+  includedUsers Int
+  activeUsers   Int
+  extrasCount   Int
+  baseAmount    Int      // FCFA
+  extrasAmount  Int      // FCFA
+  totalAmount   Int      // FCFA
+  currency      String   @default("FCFA")
+  status        String   @default("issued") // draft | issued | paid | overdue | cancelled
+  issuedAt      DateTime @default(now())
+  dueAt         DateTime?
+  paidAt        DateTime?
+  notes         String?
+  pdfUrl        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, period])
+  @@index([tenantId, status, issuedAt])
 }
 
 

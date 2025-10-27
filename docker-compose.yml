@@ -76,9 +76,7 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
       - SMTP_FROM=${SMTP_FROM}
-    volumes:
-      - .:/app
-      - /app/node_modules
+    # Pas de volumes pour éviter d'écraser node_modules dans l'image
     depends_on:
       - db
 

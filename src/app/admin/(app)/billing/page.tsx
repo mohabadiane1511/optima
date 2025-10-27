@@ -27,12 +27,64 @@ export default function BillingPage() {
         })();
     }, []);
 
+    // Synchroniser la fréquence/period sur le tenant sélectionné
+    useEffect(() => {
+        (async () => {
+            if (!tenantId) return;
+            try {
+                const res = await fetch(`/api/admin/tenants/${tenantId}`, { cache: 'no-store' });
+                if (!res.ok) return;
+                const t = await res.json();
+                if (t?.billingFrequency) {
+                    const f = t.billingFrequency as 'monthly' | 'annual';
+                    setFrequency(f);
+                    if (f === 'annual') {
+                        setPeriod(String(now.getFullYear()));
+                    } else {
+                        setPeriod(defaultMonth);
+                    }
+                }
+            } catch { }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tenantId]);
+
     async function loadPreview() {
         if (!tenantId || !period) return;
         const url = `/api/admin/billing/preview?tenantId=${tenantId}&period=${period}&frequency=${frequency}`;
         const res = await fetch(url);
         if (res.ok) setPreview(await res.json());
     }
+
+    async function createInvoice() {
+        if (!tenantId || !period) return;
+        const res = await fetch('/api/admin/billing/invoices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenantId, period, frequency }),
+        });
+        if (res.ok) {
+            await loadInvoices();
+        }
+    }
+
+    const [invoices, setInvoices] = useState<any[]>([]);
+    async function loadInvoices() {
+        if (!tenantId) return;
+        const res = await fetch(`/api/admin/billing/invoices?tenantId=${tenantId}&limit=10`);
+        if (res.ok) setInvoices(await res.json());
+    }
+
+    async function updateStatus(id: string, action: 'markPaid' | 'markCancelled' | 'markIssued') {
+        await fetch(`/api/admin/billing/invoices/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+        });
+        await loadInvoices();
+    }
+
+    useEffect(() => { loadInvoices(); }, [tenantId]);
 
     const money = (v: number) => new Intl.NumberFormat('fr-FR').format(Number(v || 0)) + ' FCFA';
 
@@ -95,6 +147,9 @@ export default function BillingPage() {
                                 <Button variant="outline">Télécharger PDF</Button>
                             </a>
                         )}
+                        {preview && (
+                            <Button variant="secondary" onClick={createInvoice}>Créer facture</Button>
+                        )}
                     </div>
 
                     {preview && (
@@ -140,6 +195,54 @@ export default function BillingPage() {
                                     <CardContent className="text-3xl font-extrabold text-gray-900">{money(preview.amounts.total)}</CardContent>
                                 </Card>
                             </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Factures récentes</CardTitle>
+                    <CardDescription>Dernières factures pour l’entreprise sélectionnée</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {invoices.length === 0 ? (
+                        <div className="text-sm text-gray-500">Aucune facture.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="text-left text-gray-500">
+                                    <tr>
+                                        <th className="py-2">Période</th>
+                                        <th className="py-2">Fréquence</th>
+                                        <th className="py-2">Base</th>
+                                        <th className="py-2">Extras</th>
+                                        <th className="py-2">Total</th>
+                                        <th className="py-2">Statut</th>
+                                        <th className="py-2">Émise le</th>
+                                        <th className="py-2"></th>
+                                        <th className="py-2"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {invoices.map((inv) => (
+                                        <tr key={inv.id} className="border-t">
+                                            <td className="py-2">{inv.period}</td>
+                                            <td className="py-2">{inv.frequency === 'annual' ? 'Annuel' : 'Mensuel'}</td>
+                                            <td className="py-2">{money(inv.baseAmount)}</td>
+                                            <td className="py-2">{money(inv.extrasAmount)}</td>
+                                            <td className="py-2 font-semibold">{money(inv.totalAmount)}</td>
+                                            <td className="py-2">{inv.status}</td>
+                                            <td className="py-2">{new Date(inv.issuedAt).toLocaleDateString('fr-FR')}</td>
+                                            <td className="py-2"><a className="text-blue-600" href={`/api/admin/billing/pdf?tenantId=${tenantId}&period=${inv.period}&frequency=${inv.frequency}`} target="_blank" rel="noreferrer">PDF</a></td>
+                                            <td className="py-2 space-x-2">
+                                                <button className="text-green-700" onClick={() => updateStatus(inv.id, 'markPaid')}>Marquer payé</button>
+                                                <button className="text-red-700" onClick={() => updateStatus(inv.id, 'markCancelled')}>Annuler</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </CardContent>

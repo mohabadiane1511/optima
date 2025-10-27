@@ -37,6 +37,7 @@ interface Tenant {
     website?: string; // Site web
     logoUrl?: string; // URL du logo
     status: 'active' | 'inactive';
+    billingFrequency?: 'monthly' | 'annual';
 }
 
 interface TenantDialogProps {
@@ -103,6 +104,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
                     address: tenant.address || '',
                     website: tenant.website || '',
                     logoUrl: tenant.logoUrl || '',
+                    billingFrequency: (tenant as any)?.billingFrequency || 'monthly',
                 });
                 setLogoPreview(tenant.logoUrl || '');
                 // Récupérer planId courant si possible
@@ -130,6 +132,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
                     website: '',
                     logoUrl: '',
                     status: 'active',
+                    billingFrequency: 'monthly',
                 });
                 setLogoPreview('');
             }
@@ -376,6 +379,19 @@ export function TenantDialog({ open, onOpenChange, tenant, onSaved }: TenantDial
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-gray-500">Modules: {(plans.find(p => p.id === selectedPlanId)?.modules || []).join(', ')}</p>
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                            <Label>Facturation</Label>
+                            <Select value={formData.billingFrequency || 'monthly'} onValueChange={(v: any) => setFormData(prev => ({ ...prev, billingFrequency: v }))}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Choisir la fréquence" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="monthly">Mensuelle</SelectItem>
+                                    <SelectItem value="annual">Annuelle</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-gray-500">Ancrage sur la date de création (jour/mois anniversaire).</p>
                         </div>
                     </div>
 

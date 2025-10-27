@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       website,
       logoUrl,
       planId,
-      planCode
+      planCode,
+      billingFrequency
     } = data;
 
     // Vérifier que le slug est unique
@@ -105,6 +106,24 @@ export async function POST(request: NextRequest) {
     // Utiliser une transaction pour créer le tenant (avec snapshot de plan) et l'admin
     const result = await db.$transaction(async (tx: any) => {
       // 1. Créer le tenant
+      const createdAt = new Date();
+      const anchorDay = createdAt.getDate();
+      const anchorMonth = createdAt.getMonth() + 1; // 1..12
+      const nextInvoiceAt = (() => {
+        const d = new Date(createdAt);
+        if ((billingFrequency || 'monthly') === 'annual') {
+          d.setFullYear(d.getFullYear() + 1);
+          d.setMonth(anchorMonth - 1);
+          d.setDate(anchorDay);
+          return d;
+        } else {
+          // mensuel: mois suivant, même jour (fallback fin de mois géré par JS)
+          d.setMonth(d.getMonth() + 1);
+          d.setDate(anchorDay);
+          return d;
+        }
+      })();
+
       const tenant = await tx.tenant.create({
         data: {
           name,
@@ -122,6 +141,12 @@ export async function POST(request: NextRequest) {
           planCode: plan.code,
           maxUsers: plan.includedUsers,
           allowedModules: plan.modules,
+          billingFrequency: billingFrequency || 'monthly',
+          billingAnchorDay: anchorDay,
+          billingAnchorMonth: anchorMonth,
+          dueDays: 15,
+          autoBillingEnabled: true,
+          nextInvoiceAt,
         },
       });
 
