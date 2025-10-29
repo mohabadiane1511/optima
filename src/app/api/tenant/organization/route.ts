@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     if (!tenantId) return NextResponse.json({ error: 'Tenant introuvable' }, { status: 400 });
 
     const db = prisma as any;
-    const t = await db.tenant.findUnique({ where: { id: tenantId }, select: { name: true, logoUrl: true, businessRegistration: true, ninea: true } });
+    const t = await db.tenant.findUnique({ where: { id: tenantId }, select: { name: true, logoUrl: true, businessRegistration: true, ninea: true, billingFrequency: true, nextInvoiceAt: true, lastInvoicedPeriod: true } });
     if (!t) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
 
     return NextResponse.json({
@@ -53,6 +53,9 @@ export async function GET(request: NextRequest) {
       logoUrl: t.logoUrl || null,
       businessRegistration: t.businessRegistration || null,
       ninea: t.ninea || null,
+      billingFrequency: t.billingFrequency || 'monthly',
+      nextInvoiceAt: t.nextInvoiceAt ? t.nextInvoiceAt.toISOString() : null,
+      lastInvoicedPeriod: t.lastInvoicedPeriod || null,
     });
   } catch (e) {
     console.error('GET /api/tenant/organization error', e);

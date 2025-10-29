@@ -23,52 +23,67 @@ function generateNumber(date = new Date(), seq: number) {
   return `INV-${y}-${String(seq).padStart(4, '0')}`;
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, ctx: { params: { id: string } | Promise<{ id: string }> }) {
   try {
     const tenantId = await resolveTenantId(request);
     if (!tenantId) return NextResponse.json({ error: 'Tenant introuvable' }, { status: 400 });
 
     const db = prisma as any;
-    const inv = await db.invoice.findFirst({ where: { id: params.id, tenantId }, include: { lines: true } });
+    const { id } = await (ctx.params as any);
+    const inv = await db.invoice.findFirst({ where: { id, tenantId }, include: { lines: true } });
     if (!inv) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
     if (inv.status !== 'draft') return NextResponse.json({ error: 'Déjà émise ou annulée' }, { status: 400 });
     if (!inv.lines.length) return NextResponse.json({ error: 'Aucune ligne' }, { status: 400 });
 
-    // simple séquence: compter les factures de l’année courante
-    const yearStart = new Date(new Date().getFullYear(), 0, 1);
-    const countYear = await db.invoice.count({ where: { tenantId, issueDate: { gte: yearStart } } });
-    const number = generateNumber(new Date(), countYear + 1);
+    // Génération robuste du numéro: tenant-scoped + retry sur collision
+    const issueDate = new Date();
+    const yearStart = new Date(issueDate.getFullYear(), 0, 1);
 
-    const updated = await db.$transaction(async (txRaw: any) => {
-      const tx = txRaw as any;
-      // 1) Émettre la facture
-      const upd = await tx.invoice.update({
-        where: { id: inv.id },
-        data: { status: 'sent', issueDate: new Date(), number },
-        select: { id: true, number: true, status: true, issueDate: true }
-      });
+    let number = '';
+    let attempts = 0;
+    while (attempts < 3) {
+      const countYear = await db.invoice.count({ where: { tenantId, issueDate: { gte: yearStart } } });
+      number = generateNumber(issueDate, countYear + 1);
+      try {
+        const updated = await db.$transaction(async (txRaw: any) => {
+          const tx = txRaw as any;
+          // Idempotence: si déjà numérotée, renvoyer telle quelle
+          const already = await tx.invoice.findUnique({ where: { id: inv.id } });
+          if (already?.number) return already;
 
-      // 2) Décrémenter les stocks et créer les mouvements OUT
-      for (const l of inv.lines) {
-        if (!l.productId) continue;
-        const existing = await tx.stock.findFirst({ where: { tenantId, productId: l.productId } });
-        const qty = Number(l.qty || 0);
-        const nextQty = Math.max(0, Number(existing?.qtyOnHand ?? 0) - qty);
-        if (!existing) {
-          await tx.stock.create({ data: { tenantId, productId: l.productId, qtyOnHand: nextQty, reorderPoint: 0 } });
-        } else {
-          await tx.stock.update({ where: { id: existing.id }, data: { qtyOnHand: nextQty } });
-        }
-        await tx.stockMovement.create({ data: { tenantId, productId: l.productId, type: 'OUT', qty, reason: `Invoice ${number}` } });
+          const upd = await tx.invoice.update({
+            where: { id: inv.id },
+            data: { status: 'sent', issueDate, number },
+            select: { id: true, number: true, status: true, issueDate: true }
+          });
+
+          for (const l of inv.lines) {
+            if (!l.productId) continue;
+            const existing = await tx.stock.findFirst({ where: { tenantId, productId: l.productId } });
+            const qty = Number(l.qty || 0);
+            const nextQty = Math.max(0, Number(existing?.qtyOnHand ?? 0) - qty);
+            if (!existing) {
+              await tx.stock.create({ data: { tenantId, productId: l.productId, qtyOnHand: nextQty, reorderPoint: 0 } });
+            } else {
+              await tx.stock.update({ where: { id: existing.id }, data: { qtyOnHand: nextQty } });
+            }
+            await tx.stockMovement.create({ data: { tenantId, productId: l.productId, type: 'OUT', qty, reason: `Invoice ${number}` } });
+          }
+
+          return upd;
+        });
+
+        await logAuditEvent({ tenantId, action: 'invoice.issued', entity: 'invoice', entityId: updated.id, metadata: { number: updated.number } }, request);
+        return NextResponse.json(updated);
+      } catch (e: any) {
+        // Collision numéro (unicité tenantId,number) → retry
+        if (e?.code === 'P2002') { attempts++; continue; }
+        throw e;
       }
+    }
 
-      return upd;
-    });
-
-    // Audit: émission
-    await logAuditEvent({ tenantId, action: 'invoice.issued', entity: 'invoice', entityId: updated.id, metadata: { number: updated.number } }, request);
-
-    return NextResponse.json(updated);
+    // Si on arrive ici, échec après retries
+    return NextResponse.json({ error: 'Conflit de numérotation, réessayez.' }, { status: 409 });
   } catch (e) {
     console.error('POST /api/tenant/invoices/[id]/issue', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

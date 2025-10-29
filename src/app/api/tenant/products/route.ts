@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (e: any) {
     if (e?.code === 'P2002') {
-      return NextResponse.json({ error: 'SKU déjà utilisé' }, { status: 400 });
+      return NextResponse.json({ error: 'Ce SKU existe déjà pour cette entreprise.' }, { status: 400 });
     }
     console.error('POST /api/tenant/products error', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

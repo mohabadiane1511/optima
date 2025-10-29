@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, CircleDollarSign, Scale } from 'lucide-react';
+import { Users, CircleDollarSign, Scale, Download, CheckCircle, XCircle } from 'lucide-react';
 
 export default function BillingPage() {
     const [tenants, setTenants] = useState<{ id: string; name: string }[]>([]);
@@ -69,9 +69,14 @@ export default function BillingPage() {
     }
 
     const [invoices, setInvoices] = useState<any[]>([]);
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [periodFilter, setPeriodFilter] = useState<string>('');
     async function loadInvoices() {
         if (!tenantId) return;
-        const res = await fetch(`/api/admin/billing/invoices?tenantId=${tenantId}&limit=10`);
+        const p = new URLSearchParams({ tenantId, limit: '10' });
+        if (statusFilter && statusFilter !== 'all') p.set('status', statusFilter);
+        if (periodFilter) p.set('period', periodFilter);
+        const res = await fetch(`/api/admin/billing/invoices?${p.toString()}`);
         if (res.ok) setInvoices(await res.json());
     }
 
@@ -87,6 +92,15 @@ export default function BillingPage() {
     useEffect(() => { loadInvoices(); }, [tenantId]);
 
     const money = (v: number) => new Intl.NumberFormat('fr-FR').format(Number(v || 0)) + ' FCFA';
+    const statusLabel = (s: string) => s === 'paid' ? 'Payée' : s === 'cancelled' ? 'Annulée' : 'Émise';
+    const formatPeriod = (p: string, f: 'monthly' | 'annual') => {
+        if (f === 'annual') return p;
+        try {
+            const d = new Date(p + '-01');
+            const label = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+            return label.charAt(0).toUpperCase() + label.slice(1);
+        } catch { return p; }
+    };
 
     return (
         <div className="space-y-6">
@@ -165,7 +179,7 @@ export default function BillingPage() {
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm text-gray-500">Période</CardTitle>
                                     </CardHeader>
-                                    <CardContent className="text-lg font-semibold">{preview.period} ({preview.frequency === 'annual' ? 'Annuel' : 'Mensuel'})</CardContent>
+                                    <CardContent className="text-lg font-semibold">{formatPeriod(preview.period, preview.frequency)} ({preview.frequency === 'annual' ? 'Annuel' : 'Mensuel'})</CardContent>
                                 </Card>
                                 <Card>
                                     <CardHeader className="pb-2">
@@ -206,6 +220,24 @@ export default function BillingPage() {
                     <CardDescription>Dernières factures pour l’entreprise sélectionnée</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="flex flex-wrap gap-3 mb-3">
+                        <div>
+                            <label className="text-sm">Statut</label>
+                            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setTimeout(loadInvoices, 0); }}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Tous</SelectItem>
+                                    <SelectItem value="issued">Émise</SelectItem>
+                                    <SelectItem value="paid">Payée</SelectItem>
+                                    <SelectItem value="cancelled">Annulée</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <label className="text-sm">Période</label>
+                            <Input placeholder="AAAA ou AAAA-MM" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} onBlur={loadInvoices} />
+                        </div>
+                    </div>
                     {invoices.length === 0 ? (
                         <div className="text-sm text-gray-500">Aucune facture.</div>
                     ) : (
@@ -213,6 +245,7 @@ export default function BillingPage() {
                             <table className="w-full text-sm">
                                 <thead className="text-left text-gray-500">
                                     <tr>
+                                        <th className="py-2">N°</th>
                                         <th className="py-2">Période</th>
                                         <th className="py-2">Fréquence</th>
                                         <th className="py-2">Base</th>
@@ -227,17 +260,30 @@ export default function BillingPage() {
                                 <tbody>
                                     {invoices.map((inv) => (
                                         <tr key={inv.id} className="border-t">
-                                            <td className="py-2">{inv.period}</td>
+                                            <td className="py-2 font-mono text-xs">{inv.invoiceNumber || '-'}</td>
+                                            <td className="py-2">{formatPeriod(inv.period, inv.frequency)}</td>
                                             <td className="py-2">{inv.frequency === 'annual' ? 'Annuel' : 'Mensuel'}</td>
                                             <td className="py-2">{money(inv.baseAmount)}</td>
                                             <td className="py-2">{money(inv.extrasAmount)}</td>
                                             <td className="py-2 font-semibold">{money(inv.totalAmount)}</td>
-                                            <td className="py-2">{inv.status}</td>
+                                            <td className="py-2">{statusLabel(inv.status)}</td>
                                             <td className="py-2">{new Date(inv.issuedAt).toLocaleDateString('fr-FR')}</td>
-                                            <td className="py-2"><a className="text-blue-600" href={`/api/admin/billing/pdf?tenantId=${tenantId}&period=${inv.period}&frequency=${inv.frequency}`} target="_blank" rel="noreferrer">PDF</a></td>
-                                            <td className="py-2 space-x-2">
-                                                <button className="text-green-700" onClick={() => updateStatus(inv.id, 'markPaid')}>Marquer payé</button>
-                                                <button className="text-red-700" onClick={() => updateStatus(inv.id, 'markCancelled')}>Annuler</button>
+                                            <td className="py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Button size="sm" variant="outline" asChild>
+                                                        <a href={`/api/admin/billing/pdf?tenantId=${tenantId}&period=${inv.period}&frequency=${inv.frequency}`} target="_blank" rel="noreferrer">
+                                                            <Download className="h-4 w-4" />
+                                                        </a>
+                                                    </Button>
+                                                    <Button size="sm" variant="ghost" onClick={() => updateStatus(inv.id, 'markPaid')} className="text-green-700 hover:text-green-800 hover:bg-green-50">
+                                                        <CheckCircle className="h-4 w-4" />
+                                                        Marquer payé
+                                                    </Button>
+                                                    <Button size="sm" variant="ghost" onClick={() => updateStatus(inv.id, 'markCancelled')} className="text-red-700 hover:text-red-800 hover:bg-red-50">
+                                                        <XCircle className="h-4 w-4" />
+                                                        Annuler
+                                                    </Button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

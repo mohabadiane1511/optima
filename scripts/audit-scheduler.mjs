@@ -131,6 +131,16 @@ async function runAutoBilling() {
       const dueAt = new Date(issuedAt);
       dueAt.setDate(dueAt.getDate() + Number(t.dueDays ?? 15));
 
+      // Générer numéro de facture (format: FAC-YYYYMM-NNN)
+      const yearMonth = period.replace("-", "");
+      const count = await prisma.billingInvoice.count({
+        where: { invoiceNumber: { startsWith: `FAC-${yearMonth}` } },
+      });
+      const invoiceNumber = `FAC-${yearMonth}-${String(count + 1).padStart(
+        3,
+        "0"
+      )}`;
+
       await prisma.billingInvoice.upsert({
         where: { tenantId_period: { tenantId: t.id, period } },
         update: {
@@ -151,6 +161,7 @@ async function runAutoBilling() {
           tenantId: t.id,
           period,
           frequency,
+          invoiceNumber,
           planCode: preview.plan.code,
           planName: preview.plan.name,
           includedUsers: preview.numbers.includedUsers,

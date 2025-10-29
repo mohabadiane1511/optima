@@ -270,6 +270,7 @@ export default function PurchasesRfqPage() {
     const [sendOpen, setSendOpen] = useState(false);
     const [sendSubject, setSendSubject] = useState("");
     const [sendMessage, setSendMessage] = useState("");
+    const [sendTo, setSendTo] = useState("");
 
     const openSend = (r: Rfq) => {
         // Préparer un sujet et un message par défaut
@@ -280,6 +281,7 @@ export default function PurchasesRfqPage() {
         const body = `Bonjour,\n\nMerci de nous communiquer votre meilleure offre pour les lignes suivantes :\n${bodyLines}\n\nMerci d'indiquer le délai, les conditions et la validité de l'offre.\n\nCordialement,`;
         setSendSubject(subject);
         setSendMessage(body);
+        setSendTo(r.suppliers.join(", "));
         setSendOpen(true);
     };
 
@@ -344,6 +346,18 @@ export default function PurchasesRfqPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Lignes</Label>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="text-left text-gray-500">
+                                            <tr>
+                                                <th className="py-1">Article / Service</th>
+                                                <th className="py-1">Qté</th>
+                                                <th className="py-1">Prix estimé</th>
+                                                <th className="py-1">TVA %</th>
+                                            </tr>
+                                        </thead>
+                                    </table>
+                                </div>
                                 <div className="space-y-2">
                                     {cLines.map((l, idx) => (
                                         <div key={l.id} className="grid grid-cols-12 gap-2 items-center">
@@ -616,16 +630,8 @@ export default function PurchasesRfqPage() {
                         <div className="space-y-4">
                             {/* En‑tête style mail */}
                             <div className="grid grid-cols-12 items-center gap-2 text-sm">
-                                <div className="col-span-2 text-gray-500">De</div>
-                                <div className="col-span-10"><Input value="achats@optima.local" readOnly /></div>
                                 <div className="col-span-2 text-gray-500">À</div>
-                                <div className="col-span-10">
-                                    <div className="flex flex-wrap gap-2">
-                                        {detail.suppliers.map((s) => (
-                                            <Badge key={s} variant="secondary">{s}</Badge>
-                                        ))}
-                                    </div>
-                                </div>
+                                <div className="col-span-10"><Input value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="email1@exemple.com, email2@exemple.com" /></div>
                                 <div className="col-span-2 text-gray-500">Cc</div>
                                 <div className="col-span-10"><Input placeholder="Ajouter des destinataires en copie (optionnel)" /></div>
                                 <div className="col-span-2 text-gray-500">Objet</div>
@@ -712,10 +718,16 @@ export default function PurchasesRfqPage() {
                                     try {
                                         setLoadingRfqSend(true);
                                         const idem = Math.random().toString(36).slice(2);
-                                        const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/send`, { method: 'POST', headers: { 'x-idempotency-key': idem } });
+                                        const res = await fetch(`/api/tenant/purchases/rfqs/${detail.id}/send`, {
+                                            method: 'POST',
+                                            headers: { 'x-idempotency-key': idem, 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ subject: sendSubject, message: sendMessage, to: sendTo })
+                                        });
                                         if (!res.ok) { toast.error('Erreur lors de l\'envoi'); return; }
                                         setSendOpen(false);
-                                        await setStatus(detail, 'sent');
+                                        // Le backend a envoyé le mail ET changé le statut automatiquement
+                                        toast.success('Email envoyé aux fournisseurs');
+                                        window.location.reload();
                                     } finally { setLoadingRfqSend(false); }
                                 }} disabled={loadingRfqSend}>{loadingRfqSend ? (<><Spinner className="mr-2" />Envoi…</>) : 'Envoyer'}</Button>
                             </div>
