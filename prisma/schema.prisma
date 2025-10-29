@@ -95,7 +95,7 @@ model Category {
 model Product {
   id            String   @id @default(cuid())
   tenantId      String
-  sku           String   @unique
+  sku           String
   name          String
   categoryId    String?
   category      Category? @relation(fields: [categoryId], references: [id])
@@ -110,6 +110,7 @@ model Product {
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
+  @@unique([tenantId, sku])
 }
 
 model Stock {
@@ -160,7 +161,7 @@ model Invoice {
   id         String   @id @default(cuid())
   tenantId   String
   customerId String
-  number     String?  @unique // assigné à l'émission
+  number     String?  // assigné à l'émission
   status     String   @default("draft") // draft | sent | paid | overdue | cancelled
   issueDate  DateTime? // date d'émission
   dueDate    DateTime?
@@ -175,6 +176,7 @@ model Invoice {
 
   @@index([tenantId])
   @@index([tenantId, customerId])
+  @@unique([tenantId, number])
 }
 
 model InvoiceLine {
@@ -269,6 +271,7 @@ model BillingInvoice {
   tenantId     String
   period       String   // 'AAAA-MM' (mensuel) ou 'AAAA' (annuel)
   frequency    String   // 'monthly' | 'annual'
+  invoiceNumber String? @unique // N° de facture (ex: FAC-202510-001)
   planCode     String
   planName     String
   includedUsers Int

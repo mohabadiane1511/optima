@@ -297,7 +297,7 @@ export default function InvoicesListPage() {
                     <p className="text-gray-600">Suivi des ventes et paiements</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={async () => {
+                    <Button variant="outline" hidden onClick={async () => {
                         try {
                             const url = '/api/tenant/invoices/export';
                             window.location.href = url;

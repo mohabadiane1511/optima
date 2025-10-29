@@ -14,7 +14,7 @@ function requireSA(request: NextRequest) {
   return { ok: true as const };
 }
 
-// GET /api/admin/billing/invoices?tenantId=&status=&limit=
+// GET /api/admin/billing/invoices?tenantId=&status=&period=&limit=
 export async function GET(request: NextRequest) {
   const auth = requireSA(request);
   if (!auth.ok) return auth.res;
@@ -22,11 +22,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const tenantId = searchParams.get('tenantId') || undefined;
     const status = searchParams.get('status') || undefined;
+    const period = searchParams.get('period') || undefined;
     const limit = Number(searchParams.get('limit') || 20);
 
     const where: any = {};
     if (tenantId) where.tenantId = tenantId;
     if (status) where.status = status;
+    if (period) where.period = period;
 
     const invoices = await db.billingInvoice.findMany({
       where,
@@ -61,6 +63,11 @@ export async function POST(request: NextRequest) {
     const dueAt = new Date(issuedAt);
     dueAt.setDate(dueAt.getDate() + dueDays);
 
+    // Générer numéro de facture (format: FAC-YYYYMM-NNN)
+    const yearMonth = period.replace('-', '');
+    const count = await db.billingInvoice.count({ where: { invoiceNumber: { startsWith: `FAC-${yearMonth}` } } });
+    const invoiceNumber = `FAC-${yearMonth}-${String(count + 1).padStart(3, '0')}`;
+
     // Idempotence par (tenantId, period)
     const invoice = await db.billingInvoice.upsert({
       where: { tenantId_period: { tenantId, period } },
@@ -83,6 +90,7 @@ export async function POST(request: NextRequest) {
         tenantId,
         period,
         frequency,
+        invoiceNumber,
         planCode: preview.plan.code,
         planName: preview.plan.name,
         includedUsers: preview.numbers.includedUsers,

@@ -16,6 +16,9 @@ type OrgData = {
     logoUrl: string | null;
     businessRegistration: string | null;
     ninea: string | null;
+    billingFrequency?: 'monthly' | 'annual';
+    nextInvoiceAt?: string | null;
+    lastInvoicedPeriod?: string | null;
 };
 
 type ProfileData = {
@@ -137,6 +140,19 @@ export default function SettingsPage() {
         }
     }
 
+    const formatPeriod = (p?: string | null) => {
+        if (!p) return '-';
+        if (/^\d{4}$/.test(p)) return p; // annuel
+        if (/^\d{4}-\d{2}$/.test(p)) {
+            try {
+                const d = new Date(p + '-01');
+                const label = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                return label.charAt(0).toUpperCase() + label.slice(1);
+            } catch { return p; }
+        }
+        return p;
+    };
+
     return (
         <div className="p-6 space-y-6">
             <div>
@@ -231,6 +247,38 @@ export default function SettingsPage() {
                                     )}
                                 </div>
                             </form>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {myRole === 'admin' && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Abonnement & Facturation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? (
+                            <div className="space-y-2">
+                                <Skeleton className="h-5 w-40" />
+                                <Skeleton className="h-5 w-48" />
+                                <Skeleton className="h-5 w-56" />
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                <div>
+                                    <div className="text-gray-500">Périodicité</div>
+                                    <div className="font-medium">{org?.billingFrequency === 'annual' ? 'Annuelle' : 'Mensuelle'}</div>
+                                </div>
+                                <div>
+                                    <div className="text-gray-500">Prochaine facture</div>
+                                    <div className="font-medium">{org?.nextInvoiceAt ? new Date(org.nextInvoiceAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}</div>
+                                </div>
+                                <div>
+                                    <div className="text-gray-500">Dernière période facturée</div>
+                                    <div className="font-medium">{formatPeriod(org?.lastInvoicedPeriod)}</div>
+                                </div>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
