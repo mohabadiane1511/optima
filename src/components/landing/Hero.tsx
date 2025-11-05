@@ -32,14 +32,19 @@ export default function Hero() {
                         {/* CTAs */}
                         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-start items-stretch sm:items-start mb-5 sm:mb-6 lg:mb-8">
                             <Button
-                                asChild
                                 size="lg"
                                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base px-4 sm:px-6 py-3 sm:py-4 lg:py-5 h-auto shadow-md hover:shadow-lg transition-all w-full sm:w-auto"
+                                onClick={(e) => {
+                                    try {
+                                        e.preventDefault();
+                                        if (typeof window !== 'undefined') {
+                                            window.location.hash = '#contact';
+                                            window.dispatchEvent(new Event('open-contact'));
+                                        }
+                                    } catch { }
+                                }}
                             >
-                                <Link href="#contact" className="flex items-center justify-center">
-                                    Contactez un commercial
-                                    <ArrowRight className="ml-2 h-4 w-4" />
-                                </Link>
+                                <span className="flex items-center justify-center">Contactez un commercial<ArrowRight className="ml-2 h-4 w-4" /></span>
                             </Button>
                             <Button
                                 asChild

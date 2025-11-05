@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Phone, Menu, X } from "lucide-react";
@@ -11,6 +12,7 @@ export default function Navbar() {
     const navLinks = [
         { href: "#modules", label: "Modules" },
         { href: "#avantages", label: "Avantages" },
+        { href: "#pour-qui", label: "Pour qui ?" },
         { href: "#tarifs", label: "Tarifs" },
         { href: "#demo", label: "Démo" },
     ];
@@ -22,9 +24,20 @@ export default function Navbar() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="h-16 flex items-center justify-between gap-4">
                     {/* Logo */}
-                    <Link href="/" className="inline-flex items-baseline gap-1">
-                        <span className="text-xl font-extrabold tracking-tight text-gray-900">Optima</span>
-                        <span className="hidden sm:inline text-sm font-semibold text-blue-600">ERP</span>
+                    <Link href="/" className="group inline-flex items-center gap-2 sm:gap-3 transition-transform hover:scale-105">
+                        <div className="transition-transform group-hover:rotate-3">
+                            <Image
+                                src="/images/logo_optima-sans_bg.png"
+                                alt="Optima"
+                                width={5000}
+                                height={5000}
+                                className="h-20 sm:h-24 md:h-16 lg:h-20 w-auto object-contain drop-shadow-sm"
+                                priority
+                            />
+                        </div>
+                        <span className="hidden md:inline text-xl lg:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent group-hover:from-blue-700 group-hover:to-blue-800 transition-all duration-300">
+                            Optima
+                        </span>
                     </Link>
 
                     {/* Desktop Nav */}
@@ -43,10 +56,19 @@ export default function Navbar() {
                                 <CalendarDays className="mr-2 h-4 w-4" /> Planifier
                             </Link>
                         </Button>
-                        <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white">
-                            <Link href="#contact" className="flex items-center">
-                                <Phone className="mr-2 h-4 w-4" /> Contact commercial
-                            </Link>
+                        <Button
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={(e) => {
+                                try {
+                                    e.preventDefault();
+                                    if (typeof window !== 'undefined') {
+                                        window.location.hash = '#contact';
+                                        window.dispatchEvent(new Event('open-contact'));
+                                    }
+                                } catch { }
+                            }}
+                        >
+                            <span className="flex items-center"><Phone className="mr-2 h-4 w-4" /> Contact commercial</span>
                         </Button>
                     </div>
 
@@ -73,10 +95,17 @@ export default function Navbar() {
                                 <CalendarDays className="mr-2 h-4 w-4" /> Planifier un rendez-vous
                             </Link>
                         </Button>
-                        <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white w-full">
-                            <Link href="#contact" onClick={() => setOpen(false)} className="flex items-center justify-center">
-                                <Phone className="mr-2 h-4 w-4" /> Contact commercial
-                            </Link>
+                        <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full" onClick={(e) => {
+                            try {
+                                e.preventDefault();
+                                setOpen(false);
+                                if (typeof window !== 'undefined') {
+                                    window.location.hash = '#contact';
+                                    window.dispatchEvent(new Event('open-contact'));
+                                }
+                            } catch { }
+                        }}>
+                            <span className="flex items-center justify-center"><Phone className="mr-2 h-4 w-4" /> Contact commercial</span>
                         </Button>
                     </div>
                 </div>

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
     Building2,
@@ -50,6 +52,12 @@ export default function TenantsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+    // Filtres & pagination (client-side)
+    const [q, setQ] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+    const [planFilter, setPlanFilter] = useState<'all' | 'ESSENTIEL' | 'CROISSANCE' | 'SERENITE' | 'PREMIUM'>('all');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Charger les tenants
     const loadTenants = async () => {
@@ -69,6 +77,9 @@ export default function TenantsPage() {
     useEffect(() => {
         loadTenants();
     }, []);
+
+    // Reset page when filters change
+    useEffect(() => { setPage(1); }, [q, statusFilter, planFilter]);
 
     const handleCreateTenant = () => {
         setSelectedTenant(null);
@@ -229,6 +240,128 @@ export default function TenantsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
+                    {/* Filtres */}
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
+                        <div className="flex-1">
+                            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (nom, slug, email, téléphone)" className="h-9" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                                <SelectTrigger className="w-44 h-9">
+                                    <SelectValue placeholder="Tous les statuts" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Tous les statuts</SelectItem>
+                                    <SelectItem value="active">Actif</SelectItem>
+                                    <SelectItem value="inactive">Inactif</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Select value={planFilter} onValueChange={(v: any) => setPlanFilter(v)}>
+                                <SelectTrigger className="w-48 h-9">
+                                    <SelectValue placeholder="Tous les plans" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Tous les plans</SelectItem>
+                                    <SelectItem value="ESSENTIEL">Essentiel</SelectItem>
+                                    <SelectItem value="CROISSANCE">Croissance</SelectItem>
+                                    <SelectItem value="SERENITE">Sérénité</SelectItem>
+                                    <SelectItem value="PREMIUM">Premium</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Select value={String(pageSize)} onValueChange={(v: any) => { setPage(1); setPageSize(Number(v)); }}>
+                                <SelectTrigger className="w-24 h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="10">10</SelectItem>
+                                    <SelectItem value="20">20</SelectItem>
+                                    <SelectItem value="50">50</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {/* Calcul filtrage/pagination */}
+                    {(() => {
+                        const lower = q.trim().toLowerCase();
+                        const filtered = tenants.filter(t => {
+                            const matchesQ = !lower || [t.name, t.slug, t.contactEmail, t.contactPhone].some(v => (v || '').toLowerCase().includes(lower));
+                            const matchesStatus = statusFilter === 'all' ? true : t.status === statusFilter;
+                            const matchesPlan = planFilter === 'all' ? true : (t.plan?.code === planFilter);
+                            return matchesQ && matchesStatus && matchesPlan;
+                        });
+                        const total = filtered.length;
+                        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+                        const safePage = Math.min(page, totalPages);
+                        const start = (safePage - 1) * pageSize;
+                        const slice = filtered.slice(start, start + pageSize);
+
+                        return (
+                            <>
+                                {slice.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <Building2 className="mx-auto h-12 w-12 text-gray-400" />
+                                        <h3 className="mt-2 text-sm font-medium text-gray-900">Aucune entreprise</h3>
+                                        <p className="mt-1 text-sm text-gray-500">Aucun résultat pour ces filtres.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {slice.map((tenant) => (
+                                            <div key={tenant.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                                <div className="flex items-center space-x-4">
+                                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                        <Building2 className="h-5 w-5 text-blue-600" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-sm font-medium text-gray-900">{tenant.name}</h3>
+                                                        <p className="text-sm text-gray-500">{tenant.slug}</p>
+                                                        {tenant.description && (<p className="text-xs text-gray-400 mt-1">{tenant.description}</p>)}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center space-x-4">
+                                                    <div className="text-right">
+                                                        <div className="flex items-center space-x-2">
+                                                            <Badge variant={tenant.status === 'active' ? 'default' : 'secondary'}>{tenant.status === 'active' ? 'Actif' : 'Inactif'}</Badge>
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 mt-1">
+                                                            {tenant._count.memberships} utilisateur{tenant._count.memberships > 1 ? 's' : ''}
+                                                            {typeof tenant.maxUsers === 'number' && (<> — capacité {tenant.maxUsers}</>)}
+                                                        </div>
+                                                        {tenant.plan?.code && (<div className="text-xs text-gray-400">Plan: {tenant.plan.code}</div>)}
+                                                    </div>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleEditTenant(tenant)}><Edit className="mr-2 h-4 w-4" />Modifier</DropdownMenuItem>
+                                                            {tenant.status === 'active' ? (
+                                                                <DropdownMenuItem onClick={() => handleDeactivateTenant(tenant.id)} className="text-orange-600"><PowerOff className="mr-2 h-4 w-4" />Désactiver</DropdownMenuItem>
+                                                            ) : (
+                                                                <>
+                                                                    <DropdownMenuItem onClick={() => handleReactivateTenant(tenant.id)} className="text-green-600"><Power className="mr-2 h-4 w-4" />Réactiver</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handlePermanentDeleteTenant(tenant.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Supprimer définitivement</DropdownMenuItem>
+                                                                </>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Pagination */}
+                                <div className="flex items-center justify-between mt-4 text-sm">
+                                    <div className="text-gray-600">Page {safePage} / {totalPages} • {total} éléments</div>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>Précédent</Button>
+                                        <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Suivant</Button>
+                                    </div>
+                                </div>
+                            </>
+                        );
+                    })()}
                     {tenants.length === 0 ? (
                         <div className="text-center py-12">
                             <Building2 className="mx-auto h-12 w-12 text-gray-400" />

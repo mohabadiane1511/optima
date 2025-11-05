@@ -527,3 +527,19 @@ model IdempotencyKey {
   @@index([tenantId, action, createdAt])
 }
 
+// Messages de contact (landing) — publics, visibles côté super-admin
+model Message {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  profileType   String   // 'individual' | 'company'
+  fullName      String
+  email         String
+  phone         String?
+  company       String?
+  companySize   String?   // '1-5' | '6-20' | '21-50' | '50+'
+  intent        String    // 'trial' | 'demo' | 'quote' | 'support' | 'partnership' | 'other'
+  modules       String[]  @default([])
+  message       String
+  status        String    @default("new") // new | in_progress | closed
+}
+
