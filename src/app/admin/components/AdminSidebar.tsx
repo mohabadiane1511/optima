@@ -14,7 +14,8 @@ import {
     Shield,
     Check,
     CheckCircle,
-    CreditCard
+    CreditCard,
+    MessageCircle
 } from 'lucide-react';
 
 const navigation = [
@@ -42,6 +43,11 @@ const navigation = [
         name: 'Facturation',
         href: '/admin/billing',
         icon: CreditCard,
+    },
+    {
+        name: 'Messages',
+        href: '/admin/messages',
+        icon: MessageCircle,
     },
     {
         name: 'Rapports',

@@ -3,9 +3,10 @@ import Hero from "@/components/landing/Hero";
 import ModulesSection from "@/components/landing/ModulesSection";
 import AdvantagesSection from "@/components/landing/AdvantagesSection";
 import PricingSection from "@/components/landing/PricingSection";
-import RoadmapSection from "@/components/landing/RoadmapSection";
 import FAQSection from "@/components/landing/FAQSection";
 import Footer from "@/components/landing/Footer";
+import ContactDialog from "@/components/landing/ContactDialog";
+import WhoIsForSection from "@/components/landing/WhoIsForSection";
 
 export default function Home() {
   return (
@@ -14,10 +15,11 @@ export default function Home() {
       <Hero />
       <ModulesSection />
       <AdvantagesSection />
+      <WhoIsForSection />
       <PricingSection />
-      <RoadmapSection />
       <FAQSection />
       <Footer />
+      <ContactDialog />
     </main>
   );
 }
